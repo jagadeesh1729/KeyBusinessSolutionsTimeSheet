@@ -1,0 +1,22 @@
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: mysql-keybusiness
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: password
+      MYSQL_DATABASE: keybusiness
+      MYSQL_USER: appuser
+      MYSQL_PASSWORD: apppassword
+      TZ: America/Los_Angeles
+
+    ports:
+      - '3306:3306'
+    volumes:
+      - db_data:/var/lib/mysql
+
+volumes:
+  db_data:
+
+# docker exec -it  container_name bash
+# mysql -u root -p 
