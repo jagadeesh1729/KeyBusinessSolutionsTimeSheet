@@ -1,27 +1,26 @@
-import express, { Request, Response } from 'express';
-import dotenv from 'dotenv';
-import cors from 'cors';
+import App from './app';
 import Logger from './utils/logger';
-import './config/database';
 
-// Load environment variables
-dotenv.config();
+const app = new App();
+const server = app.getApp();
 
-const app = express();
-const PORT = process.env.PORT;
+const PORT = process.env.PORT || 3000;
 
-// Middlewares
-app.use(cors());
-app.use(express.json());
-
-// A test route to check logger
-app.get('/', (req: Request, res: Response) => {
-  Logger.info('Received a request on the root path!');
-  res.send('Hello World! Check the console for logs.');
+// Handle uncaught exceptions
+process.on('uncaughtException', (error: Error) => {
+  Logger.error(`Uncaught Exception: ${error.message}`);
+  process.exit(1);
 });
 
-// The database is initialized when imported.
-// The connection test runs automatically.
-app.listen(PORT, () => {
+// Handle unhandled promise rejections
+process.on(
+  'unhandledRejection',
+  (reason: unknown, promise: Promise<unknown>) => {
+    Logger.error(`Unhandled Rejection at: ${promise} - reason: ${reason}`);
+    process.exit(1);
+  },
+);
+
+server.listen(PORT, () => {
   Logger.info(`🚀 Server is running on http://localhost:${PORT}`);
 });
