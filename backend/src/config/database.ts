@@ -37,6 +37,7 @@ class Database {
   getPool(): mysql.Pool {
     return this.pool;
   }
+  
 
   async query<T extends RowDataPacket[] | OkPacket>(
     sql: string,

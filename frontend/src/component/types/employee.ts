@@ -1,0 +1,35 @@
+import type Project from "./project";
+import type ProductManager from "./ProductManager";
+export enum UserRole {
+  ADMIN = 'admin',
+  EMPLOYEE = 'employee',
+  PROJECT_MANAGER = 'project_manager',
+}
+export default  interface Employee{
+    id:number;
+    first_name:string; 
+    last_name:string;
+    email:string;
+    phone:string;
+    college_name?:string | null;
+    college_address?:string | null;
+    degree?:string | null;
+    job_title?:string;//rajan
+    job_start_date?:string; //rajan
+    start_date?:string
+    end_date?:string;
+    visa_status?:string;
+    job_duties?:string;//rajan
+    date_of_birth?: string;
+    project: Project[];
+    project_ids?: number[];
+    project_manager?: ProductManager | null;
+    project_manager_id?: number | null;
+    compensation?: string | null; //rajan -no of hours vis type 
+    Performance_review?: string | null; 
+    reports?:string //rajan reports 
+    role: UserRole;
+    no_of_hours: number;
+
+}
+ 
