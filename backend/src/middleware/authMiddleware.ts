@@ -10,6 +10,7 @@ export interface AuthRequest extends Request {
     userId: number;
     email: string;
     role: UserRole;
+    employeeId?:number; 
   };
 }
 
@@ -39,7 +40,7 @@ export const authenticate = async (
     }
 
     // Add user info to request
-    req.user = payload as { userId: number; email: string; role: UserRole };
+    req.user = payload as { userId: number; email: string; role: UserRole, employeeId?:number};
     next();
   } catch (error) {
     Logger.error(`Authentication middleware error: ${error}`);
