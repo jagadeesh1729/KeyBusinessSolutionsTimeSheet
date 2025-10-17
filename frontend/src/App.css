@@ -1,1 +1,29 @@
 @import "tailwindcss";
+.custom-list li::marker {
+  margin-right: 100px;
+  padding-left: 10px;
+}
+.custom-list > li{
+    padding-left: 10px;
+}
+/* index.css */
+.a4-page {
+  width: 210mm;
+  min-height: 297mm;
+  padding: 13mm;
+  margin: 10px auto;
+  background: white;
+  box-shadow: 0 0 5px rgba(0, 0, 0, 0.1);
+  position: relative;
+}
+
+@media print {
+  body {
+    margin: 0;
+  }
+  .a4-page {
+    box-shadow: none;
+    margin: 0;
+    page-break-after: always;
+  }
+}

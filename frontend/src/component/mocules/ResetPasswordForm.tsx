@@ -1,6 +1,12 @@
-import { useState, useEffect } from 'react';
-import { TextField, Typography, Alert } from '@mui/material';
-import ButtonComp from '../atoms/Button';
+import React, { useState } from 'react';
+import {
+  Box,
+  TextField,
+  Button,
+  Typography,
+  CircularProgress,
+  Alert,
+} from '@mui/material';
 import apiClient from '../../api/apiClient';
 
 interface ResetPasswordFormProps {
@@ -8,75 +14,58 @@ interface ResetPasswordFormProps {
   onPasswordReset: () => void;
 }
 
-const ResetPasswordForm = ({ email, onPasswordReset }: ResetPasswordFormProps) => {
+const ResetPasswordForm: React.FC<ResetPasswordFormProps> = ({ email, onPasswordReset }) => {
   const [code, setCode] = useState('');
   const [newPassword, setNewPassword] = useState('');
-  const [error, setError] = useState('');
-  const [message, setMessage] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
 
-  const handleResetPassword = async () => {
-    if (!code || !newPassword) {
-      setError('Code and new password are required.');
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setSuccess(null);
+    setLoading(true);
+
+    if (newPassword.length < 6) {
+      setError('Password must be at least 6 characters long.');
+      setLoading(false);
       return;
     }
-    setError('');
-    setMessage('');
-    setIsLoading(true);
+
     try {
       const response = await apiClient.post('/auth/reset-password', { email, code, newPassword });
-      setMessage(response.data.message);
-      // Wait a moment, then switch back to the login view
+      setSuccess(response.data.message || 'Password has been reset successfully!');
       setTimeout(() => onPasswordReset(), 2000);
     } catch (err: any) {
       setError(err.response?.data?.message || 'An unexpected error occurred.');
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
   };
 
-  // Cleanup setTimeout on component unmount
-  useEffect(() => {
-    let timer: NodeJS.Timeout;
-    if (message) {
-      timer = setTimeout(() => onPasswordReset(), 2000);
-    }
-    return () => clearTimeout(timer);
-  }, [message, onPasswordReset]);
-
   return (
     <>
-      <Typography component="h1" variant="h4" align="center" sx={{ mb: 2 }}>
+      <Typography component="h1" variant="h5" sx={{ mb: 1, fontWeight: 'bold' }}>
         Reset Password
       </Typography>
-      <Typography align="center" color="text.secondary" sx={{ mb: 2 }}>
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
         Enter the code sent to <strong>{email}</strong> and your new password.
       </Typography>
-      {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
-      {message && <Alert severity="success" sx={{ mb: 2 }}>{message}</Alert>}
-      <TextField
-        label="Reset Code"
-        fullWidth
-        margin="normal"
-        value={code}
-        onChange={(e) => setCode(e.target.value)}
-      />
-      <TextField
-        label="New Password"
-        type="password"
-        fullWidth
-        margin="normal"
-        value={newPassword}
-        onChange={(e) => setNewPassword(e.target.value)}
-      />
-      <ButtonComp
-        text={isLoading ? 'Resetting...' : 'Reset Password'}
-        variant="contained"
-        onClick={handleResetPassword}
-        disabled={isLoading}
-        fullWidth
-        sx={{ mt: 3, mb: 2 }}
-      />
+      {error && <Alert severity="error" sx={{ width: '100%', mb: 2 }}>{error}</Alert>}
+      {success && <Alert severity="success" sx={{ width: '100%', mb: 2 }}>{success}</Alert>}
+      <Box component="form" onSubmit={handleSubmit} sx={{ mt: 1, width: '100%' }}>
+        <TextField margin="normal" required fullWidth id="code" label="Reset Code" name="code" autoFocus value={code} onChange={(e) => setCode(e.target.value)} />
+        <TextField margin="normal" required fullWidth name="newPassword" label="New Password" type="password" id="newPassword" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
+        <Button type="submit" fullWidth variant="contained" sx={{ mt: 3, mb: 2 }} disabled={loading}>
+          {loading ? <CircularProgress size={24} /> : 'Reset Password'}
+        </Button>
+        <Box textAlign="center">
+          <Button onClick={onPasswordReset} size="small" sx={{ textTransform: 'none' }}>
+            Back to Login
+          </Button>
+        </Box>
+      </Box>
     </>
   );
 };

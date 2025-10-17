@@ -42,7 +42,7 @@ const EmployeeProfileView = ({ employee }: EmployeeProfileViewProps) => {
         <Typography variant="h6" fontWeight="bold">Personal Information</Typography>
       </Stack>
       <div className="grid grid-cols-12 gap-6">
-        <InfoItem label="Full Name" value={employee.name} />
+        <InfoItem label="Full Name" value={`${employee.first_name} ${employee.last_name}`} />
         <InfoItem label="Email" value={employee.email} icon={<EmailOutlinedIcon fontSize="small" color="action" />} />
         <InfoItem label="Phone" value={employee.phone} icon={<PhoneOutlinedIcon fontSize="small" color="action" />} />
         <InfoItem label="Location" value={employee.location} />
@@ -84,6 +84,19 @@ const EmployeeProfileView = ({ employee }: EmployeeProfileViewProps) => {
       <div className="grid grid-cols-12 gap-6">
         <InfoItem label="Degree" value={employee.degree} />
         <InfoItem label="College" value={employee.college_name} />
+      </div>
+
+      <Divider sx={{ my: 4 }} />
+
+      {/* College DSO */}
+      <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 3 }}>
+        <SchoolOutlinedIcon color="primary" />
+        <Typography variant="h6" fontWeight="bold">College DSO</Typography>
+      </Stack>
+      <div className="grid grid-cols-12 gap-6">
+        <InfoItem label="DSO Name" value={(employee as any).college_Dso_name} />
+        <InfoItem label="DSO Email" value={(employee as any).college_Dso_email} />
+        <InfoItem label="DSO Phone" value={(employee as any).college_Dso_phone} />
       </div>
     </Box>
   );

@@ -14,7 +14,10 @@ router.post('/login', async (req: AuthRequest, res: Response) => {
     if (!email || !password) {
       return res.status(400).json({ success: false, message: 'Email and password are required' });
     }
+    console.log(req.body)
     const result = await authService.login({ email, password });
+        console.log(result)
+
     if (!result.success) {
       return res.status(401).json(result);
     }
@@ -112,9 +115,9 @@ router.get('/users', authenticate, requirePMOrAdmin, async (req: AuthRequest, re
 // Admin creates PM
 router.post('/create-pm', authenticate, requireAdmin, async (req: AuthRequest, res: Response) => {
   try {
-    const { name, email, phone, location, no_of_hours }: CreatePMRequest = req.body;
-    if (!name || !email || !phone) {
-      return res.status(400).json({ success: false, message: 'Name, email, and phone are required' });
+    const { first_name, last_name, email, phone, location, no_of_hours }: CreatePMRequest = req.body as any;
+    if (!first_name || !last_name || !email || !phone) {
+      return res.status(400).json({ success: false, message: 'First name, last name, email, and phone are required' });
     }
     const result = await authService.createProjectManager(req.user!.userId, req.body);
     if (!result.success) {
@@ -130,9 +133,9 @@ router.post('/create-pm', authenticate, requireAdmin, async (req: AuthRequest, r
 // Employee self-registration
 router.post('/register-employee', async (req: Request, res: Response) => {
   try {
-    const { name, email, phone, password }: RegisterEmployeeRequest = req.body;
-    if (!name || !email || !phone || !password) {
-      return res.status(400).json({ success: false, message: 'Name, email, phone, and password are required' });
+    const { first_name, last_name, email, phone, password }: RegisterEmployeeRequest = req.body as any;
+    if (!first_name || !last_name || !email || !phone || !password) {
+      return res.status(400).json({ success: false, message: 'First name, last name, email, phone, and password are required' });
     }
     if (password.length < 6) {
       return res.status(400).json({ success: false, message: 'Password must be at least 6 characters' });

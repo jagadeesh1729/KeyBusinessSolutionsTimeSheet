@@ -18,6 +18,7 @@ export const useProjectManagers = () => {
   const [editingManager, setEditingManager] = useState<ProductManager | null>(null);
   const [formData, setFormData] = useState<Partial<ManagerFormData>>({});
 
+
   const fetchManagersAndProjects = useCallback(async () => {
     try {
       setLoading(true);
@@ -36,8 +37,8 @@ export const useProjectManagers = () => {
           const assignedProjects = userProjectsResponse.data?.projects || [];
           return {
             id: user.id,
-            first_name: user.name.split(' ')[0] || '',
-            last_name: user.name.split(' ').slice(1).join(' ') || '',
+            first_name: user.first_name ?? (user.name ? user.name.split(' ')[0] : ''),
+            last_name: user.last_name ?? (user.name ? user.name.split(' ').slice(1).join(' ') : ''),
             email: user.email,
             phone: user.phone,
             project: assignedProjects,
@@ -76,7 +77,21 @@ export const useProjectManagers = () => {
   };
 
   const handleFormChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFormData((prev) => ({ ...prev, [e.target.name]: e.target.value }));
+    const { name, value } = e.target;
+    setFormData((prev) => ({ ...prev, [name]: value }));
+  };
+
+  // Duplicate existing PM data into create flow
+  const handleDuplicate = (manager: ProductManager) => {
+    setEditingManager(null);
+    setFormData({
+      first_name: manager.first_name,
+      last_name: manager.last_name,
+      email: manager.email,
+      phone: manager.phone,
+      project_ids: manager.project?.map(p => p.id) || [],
+    });
+    setIsModalOpen(true);
   };
 
   const handleProjectSelection = (event: SelectChangeEvent<number[]>) => {
@@ -87,9 +102,10 @@ export const useProjectManagers = () => {
   const handleSave = async () => {
     try {
       const userPayload = {
-        name: `${formData.first_name} ${formData.last_name}`.trim(),
+        first_name: formData.first_name,
+        last_name: formData.last_name,
         email: formData.email,
-        phone: formData.phone,
+        phone: String(formData.phone || '').replace(/\D/g, ''),
         location: 'Default Location', // Add fields as necessary
         no_of_hours: 40, // Add fields as necessary
       };
@@ -124,6 +140,7 @@ export const useProjectManagers = () => {
     editingManager,
     formData,
     handleOpenModal,
+    handleDuplicate,
     handleCloseModal,
     handleFormChange,
     handleProjectSelection,

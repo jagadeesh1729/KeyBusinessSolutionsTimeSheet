@@ -62,7 +62,10 @@ const TimesheetPage: React.FC = () => {
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
-  const { data: projects, loading: projectsLoading, error: projectsError } = useAssignedProjects();
+  // For Admin dashboard, we fetch ALL projects, not just assigned ones.
+  // The useAssignedProjects hook can be adapted or a new one created.
+  // Assuming useAssignedProjects can take a URL override or we have a different hook for admins.
+  const { data: projects, loading: projectsLoading, error: projectsError } = useAssignedProjects('/api/projects'); // Admin gets all projects
   const { data: currentTimesheet, loading: timesheetLoading, refetch: refetchTimesheet } = useCurrentTimesheet(selectedProjectId || undefined);
   const { updateTimesheet, submitTimesheet, loading: mutationLoading, error: mutationError } = useTimesheetMutations();
 
@@ -72,6 +75,24 @@ const TimesheetPage: React.FC = () => {
       setSelectedProjectId(projects[0].id);
     }
   }, [projects, selectedProjectId]);
+
+  // Sync existing timesheet entries from API into local editable state
+  React.useEffect(() => {
+    if (!currentTimesheet?.dailyEntries) return;
+    const merged: Record<DateString, TimesheetEntryOptionA> = {};
+    for (const entry of currentTimesheet.dailyEntries) {
+      merged[entry.date as DateString] = {
+        date: entry.date as DateString,
+        tasks: entry.tasks || [],
+        hours: entry.hours || 0,
+      };
+    }
+    setTimesheet(prev => ({
+      // Keep any unsaved local edits, but overlay server data as baseline
+      ...merged,
+      ...prev,
+    }));
+  }, [currentTimesheet?.id]);
 
   // Show mutation errors
   React.useEffect(() => {
@@ -86,8 +107,8 @@ const TimesheetPage: React.FC = () => {
   );
 
   const selectedProject = projects?.find(p => p.id === selectedProjectId);
-  const periodStart = selectedProject ? new Date() : new Date();
-  const periodEnd = selectedProject ? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) : new Date();
+  const periodStart = currentTimesheet?.periodStart ? new Date(currentTimesheet.periodStart) : new Date();
+  const periodEnd = currentTimesheet?.periodEnd ? new Date(currentTimesheet.periodEnd) : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
   const handleProjectChange = (event: any) => {
     setSelectedProjectId(event.target.value);
@@ -150,9 +171,9 @@ const TimesheetPage: React.FC = () => {
     return false;
   };
 
-  const allEntries = Object.values(timesheet).flatMap(entry => 
+  const allEntries = Object.values(timesheet).flatMap(entry => (
     entry.tasks?.map(task => ({ date: entry.date, ...task })) || []
-  );
+  ));
 
   const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
     setTabValue(newValue);
@@ -180,6 +201,10 @@ const TimesheetPage: React.FC = () => {
         </Alert>
       )}
 
+      {(projectsLoading || timesheetLoading) && (
+        <Alert severity="info" className="mb-4">Loading timesheet data...</Alert>
+      )}
+
       <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
         <Tabs value={tabValue} onChange={handleTabChange}>
           <Tab label="Current Timesheet" />
@@ -189,6 +214,9 @@ const TimesheetPage: React.FC = () => {
 
       <TabPanel value={tabValue} index={0}>
         <Box>
+          {!projectsLoading && (!projects || projects.length === 0) && (
+            <Alert severity="info" className="mb-4">No assigned projects found.</Alert>
+          )}
           <FormControl fullWidth className="mb-4">
             <InputLabel>Select Project</InputLabel>
             <Select
@@ -197,7 +225,7 @@ const TimesheetPage: React.FC = () => {
               label="Select Project"
             >
               {(projects || []).map(project => (
-                <MenuItem key={project.id} value={project.id}>
+                <MenuItem key={project.id} value={project.id} disabled={project.status !== 'Active'}>
                   {project.name} ({project.period_type})
                 </MenuItem>
               ))}

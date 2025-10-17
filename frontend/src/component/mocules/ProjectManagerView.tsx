@@ -24,9 +24,12 @@ import {
   FormControl,
 } from "@mui/material";
 import EditIcon from "@mui/icons-material/Edit";
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import { PatternFormat } from 'react-number-format';
 import ButtonComp from "../atoms/Button";
 import { useProjectManagers } from "../hooks/useProjectManagers";
 import { useState, useEffect } from 'react';
+import type Employee from "../types/employee";
 import apiClient from '../../api/apiClient';
 
 const ProjectManagerView = () => {
@@ -39,15 +42,16 @@ const ProjectManagerView = () => {
     editingManager,
     formData,
     handleOpenModal,
+    handleDuplicate,
     handleCloseModal,
     handleFormChange,
     handleProjectSelection,
     handleSave,
   } = useProjectManagers();
   
-  const [availableEmployees, setAvailableEmployees] = useState([]);
-  const [pmEmployees, setPMEmployees] = useState({});
-  const [selectedEmployeeIds, setSelectedEmployeeIds] = useState([]);
+  const [availableEmployees, setAvailableEmployees] = useState<Employee[]>([]);
+  const [pmEmployees, setPMEmployees] = useState<Record<number, Employee[]>>({});
+  const [selectedEmployeeIds, setSelectedEmployeeIds] = useState<number[]>([]);
 
   useEffect(() => {
     fetchEmployees();
@@ -79,7 +83,7 @@ const ProjectManagerView = () => {
     }
   };
 
-  const handleEmployeeSelection = (event) => {
+  const handleEmployeeSelection = (event: any) => {
     const value = event.target.value;
     setSelectedEmployeeIds(value);
   };
@@ -149,12 +153,13 @@ const ProjectManagerView = () => {
                 </TableCell>
                 <TableCell>
                   <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-                    {(pmEmployees[manager.id] || []).map(emp => <Chip key={emp.id} label={emp.name} size="small" color="secondary" />)}
+                    {(pmEmployees[manager.id] || []).map(emp => <Chip key={emp.id} label={`${emp.first_name ?? ((emp as any).name?.split(' ')[0]||'')} ${emp.last_name ?? ((emp as any).name?.split(' ').slice(1).join(' ')||'')}`} size="small" color="secondary" />)}
                   </Box>
                 </TableCell>
-                <TableCell align="right">
-                  <Tooltip title="Edit"><IconButton onClick={() => handleOpenModalWithEmployees(manager)}><EditIcon /></IconButton></Tooltip>
-                </TableCell>
+              <TableCell align="right">
+                <Tooltip title="Edit"><IconButton onClick={() => handleOpenModalWithEmployees(manager)}><EditIcon /></IconButton></Tooltip>
+                <Tooltip title="Duplicate as new"><IconButton onClick={() => handleDuplicate(manager)}><ContentCopyIcon /></IconButton></Tooltip>
+              </TableCell>
               </TableRow>
             ))}
           </TableBody>
@@ -167,7 +172,19 @@ const ProjectManagerView = () => {
           <TextField autoFocus margin="dense" name="first_name" label="First Name" fullWidth value={formData.first_name || ''} onChange={handleFormChange} />
           <TextField margin="dense" name="last_name" label="Last Name" fullWidth value={formData.last_name || ''} onChange={handleFormChange} />
           <TextField margin="dense" name="email" label="Email" type="email" fullWidth value={formData.email || ''} onChange={handleFormChange} />
-          <TextField margin="dense" name="phone" label="Phone" fullWidth value={formData.phone || ''} onChange={handleFormChange} />
+          <PatternFormat
+            format={"+1(###)-(###)-(####)"}
+            allowEmptyFormatting
+            value={formData.phone || ''}
+            onValueChange={(vals) => {
+              handleFormChange({ target: { name: 'phone', value: vals.formattedValue } } as any);
+            }}
+            customInput={TextField}
+            margin="dense"
+            name="phone"
+            label="Phone"
+            fullWidth
+          />
           <FormControl fullWidth margin="dense">
             <InputLabel id="pm-projects-select-label">Assign Projects</InputLabel>
             <Select
@@ -178,7 +195,14 @@ const ProjectManagerView = () => {
               input={<OutlinedInput id="select-multiple-chip-pm" label="Assign Projects" />}
               renderValue={(selected: number[]) => (<Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>{availableProjects.filter(p=>selected.includes(p.id)).map((p) => (<Chip key={p.id} label={p.name} />))}</Box>)}
             >
-              {availableProjects.map((project) => (<MenuItem key={project.id} value={project.id}>{project.name}</MenuItem>))}
+              {availableProjects.map((project) => {
+                const assignedByOther = managers.some(m => m.id !== (editingManager?.id || 0) && (m.project || []).some(p => p.id === project.id));
+                return (
+                  <MenuItem key={project.id} value={project.id} disabled={assignedByOther}>
+                    {project.name}{assignedByOther ? ' (Assigned to another PM)' : ''}
+                  </MenuItem>
+                );
+              })}
             </Select>
           </FormControl>
           <FormControl fullWidth margin="dense">
@@ -193,15 +217,15 @@ const ProjectManagerView = () => {
                 <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
                   {[...availableEmployees, ...(editingManager ? pmEmployees[editingManager.id] || [] : [])]
                     .filter((emp, index, self) => selected.includes(emp.id) && self.findIndex(e => e.id === emp.id) === index)
-                    .map((emp) => (<Chip key={emp.id} label={emp.name} color="secondary" />))}
+                    .map((emp) => (<Chip key={emp.id} label={`${emp.first_name ?? ((emp as any).name?.split(' ')[0]||'')} ${emp.last_name ?? ((emp as any).name?.split(' ').slice(1).join(' ')||'')}`} color="secondary" />))}
                 </Box>
               )}
             >
               {availableEmployees.map((employee) => (
-                <MenuItem key={employee.id} value={employee.id}>{employee.name} - {employee.email}</MenuItem>
+                <MenuItem key={employee.id} value={employee.id}>{`${employee.first_name ?? ((employee as any).name?.split(' ')[0]||'')} ${employee.last_name ?? ((employee as any).name?.split(' ').slice(1).join(' ')||'')}`} - {employee.email}</MenuItem>
               ))}
               {editingManager && (pmEmployees[editingManager.id] || []).map((employee) => (
-                <MenuItem key={`assigned-${employee.id}`} value={employee.id}>{employee.name} - {employee.email} (Currently Assigned)</MenuItem>
+                <MenuItem key={`assigned-${employee.id}`} value={employee.id}>{`${employee.first_name ?? ((employee as any).name?.split(' ')[0]||'')} ${employee.last_name ?? ((employee as any).name?.split(' ').slice(1).join(' ')||'')}`} - {employee.email} (Currently Assigned)</MenuItem>
               ))}
             </Select>
           </FormControl>

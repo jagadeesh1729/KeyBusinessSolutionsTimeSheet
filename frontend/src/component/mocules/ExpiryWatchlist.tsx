@@ -43,7 +43,7 @@ const ExpiryWatchlist = () => {
           <TableBody>
             {expiringUsers.map((user) => (
               <TableRow key={user.id}>
-                <TableCell>{user.name}</TableCell>
+                <TableCell>{`${user.first_name ?? (user.name?.split(' ')[0]||'')} ${user.last_name ?? (user.name?.split(' ').slice(1).join(' ')||'')}`}</TableCell>
                 <TableCell sx={{ textTransform: 'capitalize' }}>{user.role.replace('_', ' ')}</TableCell>
                 <TableCell>{new Date(user.end_date!).toLocaleDateString()}</TableCell>
                 <TableCell>

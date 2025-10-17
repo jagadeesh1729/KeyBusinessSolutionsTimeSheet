@@ -13,7 +13,8 @@ export const useEmployees = () => {
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
-  const [formData, setFormData] = useState<Partial<Employee>>({});
+  const [formData, setFormData] = useState<Partial<Employee & { selected_project_id?: number }>>({});
+  const [pmProjectsOptions, setPmProjectsOptions] = useState<Project[]>([]);
 
   const fetchData = useCallback(async () => {
     try {
@@ -30,14 +31,17 @@ export const useEmployees = () => {
       const employeeUsers = (employeesRes.data.data || []).filter((user: any) => user.role === 'employee');
       setEmployees(employeeUsers.map((user: any) => ({
         id: user.id,
-        first_name: user.name.split(' ')[0] || '',
-        last_name: user.name.split(' ').slice(1).join(' ') || '',
+        first_name: user.first_name ?? (user.name ? user.name.split(' ')[0] : ''),
+        last_name: user.last_name ?? (user.name ? user.name.split(' ').slice(1).join(' ') : ''),
         email: user.email,
         phone: user.phone,
         job_title: user.job_title || 'N/A',
         college_name: user.college_name,
         college_address: user.college_address,
         degree: user.degree,
+        college_Dso_name: user.college_Dso_name,
+        college_Dso_email: user.college_Dso_email,
+        college_Dso_phone: user.college_Dso_phone,
         job_start_date: user.employement_start_date,
         start_date: user.start_date,
         end_date: user.end_date,
@@ -56,8 +60,8 @@ export const useEmployees = () => {
       
       const pms = (managersRes.data.users || []).map((user: any) => ({
         id: user.id,
-        first_name: user.name.split(' ')[0] || '',
-        last_name: user.name.split(' ').slice(1).join(' ') || '',
+        first_name: user.first_name ?? (user.name ? user.name.split(' ')[0] : ''),
+        last_name: user.last_name ?? (user.name ? user.name.split(' ').slice(1).join(' ') : ''),
         email: user.email,
         phone: user.phone,
         project: [],
@@ -83,25 +87,37 @@ export const useEmployees = () => {
         // Fetch user's assigned projects
         const userProjectsRes = await apiClient.get(`/users/${employee.id}/projects`);
         const userProjects = userProjectsRes.data.projects || [];
+        // Fetch PM's projects to limit selection
+        const pmId = employee.project_manager?.id || employee.project_manager_id;
+        let pmProjects: Project[] = [];
+        if (pmId) {
+          const pmProjectsRes = await apiClient.get(`/users/${pmId}/projects`);
+          pmProjects = pmProjectsRes.data.projects || [];
+        }
+        setPmProjectsOptions(pmProjects);
         
         setFormData({ 
           ...employee, 
           project: userProjects,
-          project_ids: userProjects.map((p: any) => p.id) || []
+          project_ids: userProjects.map((p: any) => p.id) || [],
+          selected_project_id: (userProjects[0]?.id) || undefined,
         });
       } catch (error) {
         console.error('Failed to fetch user projects:', error);
         setFormData({ 
           ...employee, 
           project: employee.project || [],
-          project_ids: employee.project?.map(p => p.id) || []
+          project_ids: employee.project?.map(p => p.id) || [],
+          selected_project_id: (employee.project && employee.project[0]?.id) || undefined,
         });
+        setPmProjectsOptions([]);
       }
     } else {
       setFormData({
         first_name: '', last_name: '', email: '', phone: '', job_title: '',
         project: [], project_manager: null, project_ids: []
       });
+      setPmProjectsOptions([]);
     }
     setIsModalOpen(true);
   };
@@ -119,41 +135,46 @@ export const useEmployees = () => {
     }));
   };
 
+  const handleProjectSingleSelect = (event: { target: { value: any } }) => {
+    const value = Number(event.target.value);
+    setFormData(prev => ({ ...prev, selected_project_id: isNaN(value) ? undefined : value }));
+  };
+
   const handleSave = async () => {
     try {
       let userId = editingEmployee?.id;
       
       if (editingEmployee) {
-        // Update employee details - include name field and format dates
+        // Update employee details - format dates and send first/last names
         const updatePayload = { 
-          ...formData, 
-          name: `${formData.first_name} ${formData.last_name}`.trim(),
-          job_start_date: formData.job_start_date?.split('T')[0],
+          ...formData,
+          employment_start_date: formData.job_start_date?.split('T')[0],
           start_date: formData.start_date?.split('T')[0],
           end_date: formData.end_date?.split('T')[0],
-          date_of_birth: formData.date_of_birth?.split('T')[0]
+          date_of_birth: formData.date_of_birth?.split('T')[0],
+          phone: String(formData.phone || '').replace(/\D/g, ''),
         };
         await apiClient.put(`/auth/employee/${editingEmployee.id}`, updatePayload);
       } else {
         // Create new employee
         const payload = { 
           ...formData, 
-          name: `${formData.first_name} ${formData.last_name}`.trim(), 
           password: 'DefaultPassword123',
-          job_start_date: formData.job_start_date?.split('T')[0],
+          employment_start_date: formData.job_start_date?.split('T')[0],
           start_date: formData.start_date?.split('T')[0],
           end_date: formData.end_date?.split('T')[0],
-          date_of_birth: formData.date_of_birth?.split('T')[0]
+          date_of_birth: formData.date_of_birth?.split('T')[0],
+          phone: String(formData.phone || '').replace(/\D/g, ''),
         };
         const response = await apiClient.post('/users/register/employee', payload);
         userId = response.data.userId;
       }
       
-      // Assign projects if project_ids are provided
-      if (userId && formData.project_ids && formData.project_ids.length > 0) {
-        await apiClient.post('/users/assign-projects', { 
-          user_id: userId, 
-          project_ids: formData.project_ids 
+      // Assign exactly one project from the PM's project list if selected
+      if (userId && formData.selected_project_id) {
+        await apiClient.post('/users/assign-projects', {
+          user_id: userId,
+          project_ids: [formData.selected_project_id]
         });
       }
       
@@ -179,6 +200,7 @@ export const useEmployees = () => {
     employees,
     availableProjects,
     availableManagers,
+    pmProjectsOptions,
     loading,
     error,
     isModalOpen,
@@ -187,6 +209,7 @@ export const useEmployees = () => {
     handleOpenModal,
     handleCloseModal,
     handleFormChange,
+    handleProjectSingleSelect,
     handleSave,
     handleDelete,
   };

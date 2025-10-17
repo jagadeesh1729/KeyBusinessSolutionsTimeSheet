@@ -1,93 +1,116 @@
-import { useState } from 'react';
-import { TextField, Typography, Alert, Link, Box } from '@mui/material';
-import { useNavigate, Link as RouterLink } from 'react-router-dom';
-import ButtonComp from '../atoms/Button';
-import apiClient from '../../api/apiClient';
+import React, { useState } from 'react';
+import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import {
+  Box,
+  TextField,
+  Button,
+  Typography,
+  CircularProgress,
+  Alert,
+  InputAdornment,
+  IconButton,
+} from '@mui/material';
+import Visibility from '@mui/icons-material/Visibility';
+import VisibilityOff from '@mui/icons-material/VisibilityOff';
+import apiClient from '../../api/apiClient';
 
 interface LoginFormProps {
   onForgotPasswordClick: () => void;
 }
 
-const LoginForm = ({ onForgotPasswordClick }: LoginFormProps) => {
+const LoginForm: React.FC<LoginFormProps> = ({ onForgotPasswordClick }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
-  const navigate = useNavigate();
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const { login } = useAuth();
+  const navigate = useNavigate();
 
-  const handleLogin = async () => {
-    if (!email || !password) {
-      setError('Email and password are required.');
-      return;
-    }
-    setError('');
-    //{"success":true,"message":"Login successful","token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOjEsImVtYWlsIjoicmFqQGdtYWlsLmNvbSIsInJvbGUiOiJhZG1pbiIsImlhdCI6MTc1OTc3ODg3OCwiZXhwIjoxNzU5NzgyNDc4fQ.wOyyNLL4h0m4tLsOQdFMyULOfu5y2z-6kq97RPoaMa4","user":{"id":1,"name":"Rajan","email":"raj@gmail.com","role":"admin"}}
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setLoading(true);
+
     try {
       const response = await apiClient.post('/auth/login', { email, password });
-      const { user: backendUser, token } = response.data;
+      const { success, message, user, token } = response.data;
 
-      // Map the backend user object to the frontend User interface
-      const user = {
-        userId: backendUser.id.toString(),
-        email: backendUser.email,
-        name: backendUser.name,
-        role: backendUser.role,
-        no_of_hours: backendUser.no_of_hours || 0,
-      };
-
-      // Use the login function from AuthContext to store user and token
-      login(user, token);
-
-      // Redirect based on user role from the API response
-      if (user.role === 'admin') {
-        navigate('/admin-dashboard');
-      } else if (user.role === 'project_manager') {
-        navigate('/pm-dashboard');
+      if (success && user && token) {
+        login(user, token);
+        switch (user.role) {
+          case 'admin':
+            navigate('/admin', { replace: true });
+            break;
+          case 'project_manager':
+            navigate('/pm-dashboard', { replace: true });
+            break;
+          case 'employee':
+            navigate('/employee', { replace: true });
+            break;
+          default:
+            navigate('/', { replace: true });
+        }
       } else {
-        navigate('/employee-dashboard');
+        setError(message || 'Login failed. Please check your credentials.');
       }
     } catch (err: any) {
-      // Set error message from the API response, or a generic one
-      const errorMessage = err.response?.data?.message || 'Login failed. Please try again.';
-      setError(errorMessage);
-      console.error('Login error:', err);
+      setError(err.response?.data?.message || err.message || 'An unexpected error occurred.');
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
     <>
-      <Typography component="h1" variant="h4" align="center" sx={{ mb: 2 }}>
-        Sign in
+      <Typography component="h1" variant="h5" sx={{ mb: 2, fontWeight: 'bold' }}>
+        Sign In
       </Typography>
-      {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
-      <TextField
-        label="Email"
-        type="email"
-        fullWidth
-        margin="normal"
-        value={email}
-        onChange={(e) => setEmail(e.target.value)}
-      />
-      <TextField
-        label="Password"
-        type="password"
-        fullWidth
-        margin="normal"
-        value={password}
-        onChange={(e) => setPassword(e.target.value)}
-      />
-      <Box sx={{ display: 'flex', justifyContent: 'center', width: '100%' }}>
-        <ButtonComp text="Sign In" variant="contained" onClick={handleLogin} sx={{ mt: 3, mb: 2, px: 5 }} />
+      {error && (
+        <Alert severity="error" sx={{ width: '100%', mb: 2 }}>
+          {error}
+        </Alert>
+      )}
+      <Box component="form" onSubmit={handleSubmit} sx={{ mt: 1, width: '100%' }}>
+        <TextField margin="normal" required fullWidth id="email" label="Email Address" name="email" autoComplete="email" autoFocus value={email} onChange={(e) => setEmail(e.target.value)} />
+        <TextField
+          margin="normal"
+          required
+          fullWidth
+          name="password"
+          label="Password"
+          type={showPassword ? 'text' : 'password'}
+          id="password"
+          autoComplete="current-password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          InputProps={{
+            endAdornment: (
+              <InputAdornment position="end">
+                <IconButton
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  onClick={() => setShowPassword((s) => !s)}
+                  edge="end"
+                >
+                  {showPassword ? <VisibilityOff /> : <Visibility />}
+                </IconButton>
+              </InputAdornment>
+            ),
+          }}
+        />
+        <Button type="submit" fullWidth variant="contained" sx={{ mt: 3, mb: 2 }} disabled={loading}>
+          {loading ? <CircularProgress size={24} /> : 'Sign In'}
+        </Button>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+          <Button onClick={onForgotPasswordClick} size="small" sx={{ textTransform: 'none' }}>
+            Forgot password?
+          </Button>
+          <Link to="/signup" style={{ textDecoration: 'none' }}>
+            <Typography variant="body2">{"Don't have an account? Sign Up"}</Typography>
+          </Link>
+        </Box>
       </Box>
-      <div className="flex justify-between w-full">
-        <Link component="button" variant="body2" onClick={onForgotPasswordClick}>
-          Forgot password?
-        </Link>
-        <Link component={RouterLink} to="/signup" variant="body2">
-          {"Don't have an account? Sign Up"}
-        </Link>
-      </div>
     </>
   );
 };

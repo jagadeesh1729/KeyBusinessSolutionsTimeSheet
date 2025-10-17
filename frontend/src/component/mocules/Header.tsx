@@ -11,6 +11,16 @@ const Header = () => {
     navigate('/login');
   };
 
+  const getUserDisplayName = () => {
+    if (!user) return '';
+
+    const nameParts = [user.first_name, user.last_name].filter(Boolean);
+    if (nameParts.length > 0) {
+      return nameParts.join(' ');
+    }
+    return user.name || '';
+  };
+
   return (
     <AppBar position="static" color="default" elevation={1} sx={{ bgcolor: 'background.paper' }}>
       <Toolbar>
@@ -27,7 +37,7 @@ const Header = () => {
         {user ? (
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
             <Typography variant="subtitle1" color="text.secondary">
-              Welcome, <span style={{ fontWeight: 'bold', color: 'text.primary' }}>{user.name}</span>
+              Welcome, <span style={{ fontWeight: 'bold', color: 'text.primary' }}>{getUserDisplayName()}</span>
             </Typography>
             <Button variant="outlined" color="inherit" onClick={handleLogout}>
               Logout

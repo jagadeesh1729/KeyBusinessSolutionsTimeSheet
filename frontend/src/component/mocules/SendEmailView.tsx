@@ -4,7 +4,6 @@ import {
   Paper,
   Typography,
   TextField,
-  Grid,
   List,
   ListItem,
   ListItemText,
@@ -13,8 +12,10 @@ import {
   CircularProgress,
   Alert,
 } from '@mui/material';
+// Using Tailwind grid; no MUI Grid
 import ButtonComp from '../atoms/Button';
 import { useEmailRecipients } from '../hooks/useEmailRecipients';
+import apiClient from '../../api/apiClient';
 
 const SendEmailView = () => {
   const { projectManagers, employees, loading, error } = useEmailRecipients();
@@ -47,10 +48,25 @@ const SendEmailView = () => {
     setEmailDetails({ ...emailDetails, [e.target.name]: e.target.value });
   };
 
-  const handleSendEmail = () => {
-    // In a real app, this would be an API call to your backend email service
-    alert(`Sending email to ${emailDetails.recipient} with subject "${emailDetails.subject}"`);
-    console.log('Email Details:', emailDetails);
+  const [sendError, setSendError] = useState<string | null>(null);
+  const [sendSuccess, setSendSuccess] = useState<string | null>(null);
+
+  const handleSendEmail = async () => {
+    setSendError(null);
+    setSendSuccess(null);
+    try {
+      const to = selectedEmails;
+      const subject = emailDetails.subject || '';
+      const html = emailDetails.body || '';
+      if (!to.length) {
+        setSendError('Please select at least one recipient.');
+        return;
+      }
+      await apiClient.post('/email/send', { to, subject, html });
+      setSendSuccess('Email sent successfully.');
+    } catch (e: any) {
+      setSendError(e.response?.data?.message || 'Failed to send email');
+    }
   };
 
   if (loading) {
@@ -62,8 +78,8 @@ const SendEmailView = () => {
   }
 
   return (
-    <Grid container spacing={3}>
-      <Grid item xs={12} md={5}>
+    <div className="grid grid-cols-12 gap-3">
+      <div className="col-span-12 md:col-span-5">
         <Paper sx={{ p: 2, height: '100%' }}>
           <Typography variant="h6" gutterBottom>Select Recipients</Typography>
           <List dense sx={{ width: '100%', bgcolor: 'background.paper', maxHeight: 400, overflow: 'auto' }}>
@@ -81,10 +97,12 @@ const SendEmailView = () => {
             ))}
           </List>
         </Paper>
-      </Grid>
-      <Grid item xs={12} md={7}>
+      </div>
+      <div className="col-span-12 md:col-span-7">
         <Paper sx={{ p: 3 }}>
           <Typography variant="h6" gutterBottom>Compose Email</Typography>
+          {sendError && (<Alert severity="error" sx={{ mb: 2 }}>{sendError}</Alert>)}
+          {sendSuccess && (<Alert severity="success" sx={{ mb: 2 }}>{sendSuccess}</Alert>)}
           <TextField
             name="recipient"
             label="Recipient(s)"
@@ -102,8 +120,8 @@ const SendEmailView = () => {
             <ButtonComp text="Send Email" variant="contained" onClick={handleSendEmail} />
           </Box>
         </Paper>
-      </Grid>
-    </Grid>
+      </div>
+    </div>
   );
 };
 

@@ -1,22 +1,16 @@
-FROM node:18-alpine
-
-# Set the working directory in the container.
-WORKDIR /usr/src/app
-
-# Copy package.json and package-lock.json (if available)
-COPY package*.json ./
-
-# Install dependencies.
-RUN npm install
-
-# Copy the rest of the source code.
-COPY . .
-
-# Build the project (assuming tsc is configured to output to the 'dist' folder)
+FROM node:20-alpine AS build
+WORKDIR /app
+COPY backend/package*.json ./
+RUN npm ci
+COPY backend/tsconfig.json ./
+COPY backend/src ./src
 RUN npm run build
 
-# Expose the port (make sure this matches your config; here we assume 3000)
+FROM node:20-alpine AS runner
+WORKDIR /app
+ENV NODE_ENV=production
+COPY backend/package*.json ./
+RUN npm ci --omit=dev
+COPY --from=build /app/dist ./dist
 EXPOSE 3000
-
-# Start the application.
-CMD ["npm", "start"]
+CMD ["node", "dist/server.js"]

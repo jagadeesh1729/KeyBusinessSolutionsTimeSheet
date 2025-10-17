@@ -1,10 +1,14 @@
 import { useState, useEffect } from 'react';
+import { TextField } from '@mui/material';
+import { PatternFormat } from 'react-number-format';
 import { useNavigate } from 'react-router-dom';
 import apiClient from '../../api/apiClient';
 
 interface Employee {
   id: number;
-  name: string;
+  name?: string;
+  first_name?: string;
+  last_name?: string;
   email: string;
   phone: string;
   location: string;
@@ -16,12 +20,13 @@ interface Employee {
   college_name: string;
   college_address: string;
   degree: string;
+  college_Dso_name?: string;
+  college_Dso_email?: string;
+  college_Dso_phone?: string;
   job_title: string;
   date_of_birth: string;
   compensation: string;
   job_duties: string;
-  performance_review: string;
-  reports: string;
   project_manager_id: number;
 }
 
@@ -86,7 +91,30 @@ const EmployeeReviewView = () => {
     if (!formData || !selectedEmployee) return;
 
     try {
-      await apiClient.put(`/auth/employee/${selectedEmployee.id}`, formData);
+      const payload: any = {
+        first_name: formData.first_name ?? formData.name?.split(' ')[0],
+        last_name: formData.last_name ?? formData.name?.split(' ').slice(1).join(' '),
+        email: formData.email,
+        phone: String(formData.phone || '').replace(/\D/g, ''),
+        location: formData.location,
+        no_of_hours: formData.no_of_hours,
+        employment_start_date: formData.employment_start_date || undefined,
+        start_date: formData.start_date || undefined,
+        end_date: formData.end_date || undefined,
+        visa_status: formData.visa_status,
+        college_name: formData.college_name,
+        college_address: formData.college_address,
+        degree: formData.degree,
+        college_Dso_name: formData.college_Dso_name,
+        college_Dso_email: formData.college_Dso_email,
+        college_Dso_phone: formData.college_Dso_phone,
+        job_title: formData.job_title,
+        date_of_birth: formData.date_of_birth || undefined,
+        compensation: formData.compensation,
+        job_duties: formData.job_duties,
+        project_manager_id: formData.project_manager_id,
+      };
+      await apiClient.put(`/auth/employee/${selectedEmployee.id}`, payload);
       setSuccess('Employee details updated successfully');
       setTimeout(() => {
         setIsModalOpen(false);
@@ -98,7 +126,7 @@ const EmployeeReviewView = () => {
   };
 
   const getMissingFields = (employee: Employee) => {
-    const fields = [];
+    const fields: string[] = [];
     if (!employee.employment_start_date) fields.push('Employment Start Date');
     if (!employee.start_date) fields.push('OPT Start Date');
     if (!employee.end_date) fields.push('OPT End Date');
@@ -110,8 +138,6 @@ const EmployeeReviewView = () => {
     if (!employee.date_of_birth) fields.push('Date of Birth');
     if (!employee.compensation) fields.push('Compensation');
     if (!employee.job_duties) fields.push('Job Duties');
-    if (!employee.performance_review) fields.push('Performance Review');
-    if (!employee.reports) fields.push('Reports');
     return fields;
   };
 
@@ -126,7 +152,7 @@ const EmployeeReviewView = () => {
   return (
     <div className="p-6">
       <div className="mb-6">
-        <h2 className="text-2xl font-bold text-gray-900">Employee Review</h2>
+        <h2 className="text-2xl font-bold text-gray-900">Employee Profile Review</h2>
         <p className="text-gray-600 mt-2">
           {employees.length} employee{employees.length !== 1 ? 's' : ''} need{employees.length === 1 ? 's' : ''} review
         </p>
@@ -142,7 +168,7 @@ const EmployeeReviewView = () => {
             <div key={employee.id} className="bg-white rounded-lg shadow-md border border-gray-200 p-6">
               <div className="flex justify-between items-start">
                 <div className="flex-1">
-                  <h3 className="text-lg font-semibold text-gray-900">{employee.name}</h3>
+                  <h3 className="text-lg font-semibold text-gray-900">{`${employee.first_name ?? (employee.name?.split(' ')[0]||'')} ${employee.last_name ?? (employee.name?.split(' ').slice(1).join(' ')||'')}`}</h3>
                   <p className="text-gray-600">{employee.email}</p>
                   <p className="text-sm text-gray-500 mt-2">
                     Missing: {getMissingFields(employee).join(', ')}
@@ -165,7 +191,7 @@ const EmployeeReviewView = () => {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
             <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-4">
-              <h3 className="text-xl font-bold text-white">Review Employee: {selectedEmployee?.name}</h3>
+              <h3 className="text-xl font-bold text-white">Employee: Profile View : {selectedEmployee?.name}</h3>
             </div>
             
             <form onSubmit={handleSubmit} className="p-6">
@@ -182,11 +208,21 @@ const EmployeeReviewView = () => {
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">First Name</label>
                   <input
-                    name="name"
+                    name="first_name"
                     type="text"
-                    value={formData.name || ''}
+                    value={formData.first_name ?? (formData.name ? formData.name.split(' ')[0] : '')}
+                    onChange={handleInputChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Last Name</label>
+                  <input
+                    name="last_name"
+                    type="text"
+                    value={formData.last_name ?? (formData.name ? formData.name.split(' ').slice(1).join(' ') : '')}
                     onChange={handleInputChange}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
@@ -203,11 +239,13 @@ const EmployeeReviewView = () => {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
-                  <input
-                    name="phone"
-                    type="tel"
+                  <PatternFormat
+                    format={"+1(###)-(###)-(####)"}
+                    allowEmptyFormatting
                     value={formData.phone || ''}
-                    onChange={handleInputChange}
+                    onValueChange={(vals) => handleInputChange({ target: { name: 'phone', value: vals.formattedValue } } as any)}
+                    name="phone"
+                    placeholder="Enter phone number"
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
                 </div>
@@ -301,16 +339,46 @@ const EmployeeReviewView = () => {
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Degree</label>
-                  <input
-                    name="degree"
-                    type="text"
-                    value={formData.degree || ''}
-                    onChange={handleInputChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Degree</label>
+                <input
+                  name="degree"
+                  type="text"
+                  value={formData.degree || ''}
+                  onChange={handleInputChange}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">College DSO Name</label>
+                <input
+                  name="college_Dso_name"
+                  type="text"
+                  value={formData.college_Dso_name || ''}
+                  onChange={handleInputChange}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">College DSO Email</label>
+                <input
+                  name="college_Dso_email"
+                  type="email"
+                  value={formData.college_Dso_email || ''}
+                  onChange={handleInputChange}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">College DSO Phone</label>
+                <input
+                  name="college_Dso_phone"
+                  type="text"
+                  value={formData.college_Dso_phone || ''}
+                  onChange={handleInputChange}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Compensation (e.g., "Unpaid Intern" or "$15/hour")</label>
                   <input
@@ -346,27 +414,7 @@ const EmployeeReviewView = () => {
                 />
               </div>
               
-              <div className="mt-4">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Performance Review</label>
-                <textarea
-                  name="performance_review"
-                  value={formData.performance_review || ''}
-                  onChange={handleInputChange}
-                  rows={3}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
-              
-              <div className="mt-4">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Reports</label>
-                <textarea
-                  name="reports"
-                  value={formData.reports || ''}
-                  onChange={handleInputChange}
-                  rows={3}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
+              {/* Removed Performance Review and Reports per schema update */}
 
               <div className="flex justify-end gap-3 mt-6">
                 <button

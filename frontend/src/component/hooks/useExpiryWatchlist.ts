@@ -7,6 +7,8 @@ interface ExpiryUser {
   role: string;
   end_date: string | null;
   monthsFromNow?: number;
+  first_name?: string;
+  last_name?: string;
 }
 
 export const useExpiryWatchlist = () => {

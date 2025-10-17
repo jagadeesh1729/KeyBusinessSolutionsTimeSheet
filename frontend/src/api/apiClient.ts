@@ -25,3 +25,23 @@ apiClient.interceptors.request.use(
 );
 
 export default apiClient;
+
+// Add a response interceptor to handle auth expiry
+apiClient.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    const status = error?.response?.status;
+    if (status === 401) {
+      try {
+        localStorage.removeItem('token');
+        // Optionally clear any cached user info
+        localStorage.removeItem('user');
+      } catch {}
+      // Redirect to sign-in
+      if (typeof window !== 'undefined') {
+        window.location.assign('/login');
+      }
+    }
+    return Promise.reject(error);
+  },
+);

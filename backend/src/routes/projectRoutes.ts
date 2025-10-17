@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { ProjectService } from '../services/projectService';
 import { authenticate } from '../middleware/authMiddleware';
-import { requirePMOrAdmin } from '../middleware/roleMiddleware';
+import { requireAdmin, requirePMOrAdmin } from '../middleware/roleMiddleware';
 import Logger from '../utils/logger';
 
 const router = Router();
@@ -13,6 +13,17 @@ router.get('/', async (req: Request, res: Response) => {
     res.json(result);
   } catch (error) {
     Logger.error(`Get projects error: ${error}`);
+    res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+});
+
+// NEW: Admin-only route to get all projects with their timesheets
+router.get('/all-with-timesheets', authenticate, requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const result = await projectService.getAllProjectsWithTimesheets();
+    res.json(result);
+  } catch (error) {
+    Logger.error(`Get all projects with timesheets error: ${error}`);
     res.status(500).json({ success: false, message: 'Internal server error' });
   }
 });

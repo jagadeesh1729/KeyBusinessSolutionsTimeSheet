@@ -1,10 +1,10 @@
-import { useState } from 'react';
-import { Box, Paper } from '@mui/material';
+import React, { useState } from 'react';
+import { Box, Paper, Container } from '@mui/material';
 import LoginForm from './LoginForm';
 import ForgotPasswordForm from './ForgotPasswordForm';
 import ResetPasswordForm from './ResetPasswordForm';
 
-const Login = () => {
+const Login: React.FC = () => {
   const [view, setView] = useState<'login' | 'forgot' | 'reset'>('login');
   const [emailForReset, setEmailForReset] = useState('');
 
@@ -22,14 +22,17 @@ const Login = () => {
   };
 
   return (
-    <Box className="min-h-screen flex items-center justify-center bg-gray-100 p-4">
-      <Paper elevation={3} className="p-8 w-full max-w-md">
+    <Container component="main" maxWidth="xs">
+      <Paper
+        elevation={6}
+        sx={{ marginTop: 8, display: 'flex', flexDirection: 'column', alignItems: 'center', padding: 4, borderRadius: 2 }}
+      >
         {view === 'login' && <LoginForm onForgotPasswordClick={handleForgotPasswordClick} />}
         {view === 'forgot' && <ForgotPasswordForm onCodeSent={handleCodeSent} onBackToLogin={handleBackToLogin} />}
         {view === 'reset' && <ResetPasswordForm email={emailForReset} onPasswordReset={handleBackToLogin} />}
       </Paper>
-    </Box>
+    </Container>
   );
 };
 
-export default Login
+export default Login;

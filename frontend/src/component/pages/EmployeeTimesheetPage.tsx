@@ -93,16 +93,16 @@ const EmployeeTimesheetPage = () => {
   const handleSubmitTimesheet = () => {
     // This is where you would make an API call to post the timesheet data
     const newSubmission: Timesheet = {
-      id: new Date().toISOString(), // Temporary ID
-      employeeId: 'emp-123', // Mock employee ID
+      id: Date.now(), // Temporary ID
+      employeeId: 123, // Mock employee ID
       periodStart: mockAdminData.startDate,
       periodEnd: mockAdminData.endDate,
       status: 'pending',
       totalHours: totalHoursLogged,
       entries: Object.values(timesheet),
+      dailyEntries: Object.values(timesheet),
       createdAt: new Date().toISOString(),
       submittedAt: new Date().toISOString(),
-      rejectOrNot: false,
       periodType: 'weekly',
     };
 

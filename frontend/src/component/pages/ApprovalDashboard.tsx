@@ -43,7 +43,7 @@ import {
   Refresh,
   FilterList,
 } from '@mui/icons-material';
-import { usePendingTimesheets, useTimesheetMutations, usePMStats } from '../hooks/useTimesheet';
+import { useTimesheetMutations, usePMStats, useManagerTimesheetsByStatus } from '../hooks/useTimesheet';
 import { timesheetAPI } from '../../api/timesheetapi';
 import type { Timesheet } from '../types/Holiday';
 
@@ -82,6 +82,13 @@ const STATUS_CONFIG = {
     bgColor: 'rgb(254, 226, 226)',
     textColor: 'rgb(185, 28, 28)',
   },
+  'not-submitted': {
+    color: 'default' as const,
+    icon: <HourglassEmpty fontSize="small" />, 
+    label: 'Not Submitted',
+    bgColor: 'rgb(243, 244, 246)',
+    textColor: 'rgb(31, 41, 55)',
+  },
 } as const;
 
 // Priority levels for hours
@@ -103,7 +110,9 @@ const ApprovalDashboard: React.FC = () => {
   const [notSubmittedData, setNotSubmittedData] = useState<any[]>([]);
 
   // Hooks
-  const { data: timesheets, loading, error, refetch } = usePendingTimesheets();
+  const [selectedStatus, setSelectedStatus] = useState<'pending' | 'approved' | 'rejected' | 'not-submitted'>('pending');
+  const normalizedStatus: 'pending' | 'approved' | 'rejected' = selectedStatus === 'not-submitted' ? 'pending' : selectedStatus;
+  const { data: timesheets, loading, error, refetch } = useManagerTimesheetsByStatus(normalizedStatus);
   const { data: pmStats } = usePMStats();
   const { approveTimesheet, rejectTimesheet, loading: mutationLoading, error: mutationError } = useTimesheetMutations();
 
@@ -112,7 +121,7 @@ const ApprovalDashboard: React.FC = () => {
     const enhancedTimesheets = (timesheets as EnhancedTimesheet[]) || [];
     
     return {
-      pending: enhancedTimesheets.filter(ts => ts.status === 'pending').length,
+      pending: pmStats.pending,
       employees: pmStats.employees,
       projects: pmStats.projects,
       avgHoursPerTimesheet: enhancedTimesheets.length > 0 
@@ -131,6 +140,25 @@ const ApprovalDashboard: React.FC = () => {
       return () => clearTimeout(timer);
     }
   }, [mutationError]);
+
+  // Fetch not-submitted list when selected
+  useEffect(() => {
+    const fetchNotSubmitted = async () => {
+      try {
+        const response = await timesheetAPI.getEmployeesNotSubmitted();
+        if (response.data.success) {
+          setNotSubmittedData(response.data.employees || []);
+        } else {
+          setNotSubmittedData([]);
+        }
+      } catch (e) {
+        setNotSubmittedData([]);
+      }
+    };
+    if (selectedStatus === 'not-submitted') {
+      fetchNotSubmitted();
+    }
+  }, [selectedStatus]);
 
   // Handlers
   const handleApprove = async (timesheetId: number) => {
@@ -173,6 +201,11 @@ const ApprovalDashboard: React.FC = () => {
     } finally {
       setRefreshing(false);
     }
+  };
+
+  const setFilter = (status: 'pending' | 'approved' | 'rejected' | 'not-submitted') => {
+    setSelectedStatus(status);
+    // refetch will be triggered by hook effect on status
   };
 
   // Dialog handlers
@@ -332,7 +365,7 @@ const ApprovalDashboard: React.FC = () => {
       {/* Enhanced Stats Dashboard */}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 mb-8">
         <div>
-          <Card className="h-full shadow-lg hover:shadow-xl transition-shadow duration-300">
+          <Card className="h-full shadow-lg hover:shadow-xl transition-shadow duration-300 cursor-pointer" onClick={() => setFilter('pending')}>
             <CardContent className="text-center">
               <Box className="flex items-center justify-center mb-3">
                 <Badge badgeContent={stats.pending} color="warning" max={99}>
@@ -353,7 +386,7 @@ const ApprovalDashboard: React.FC = () => {
        
 
         <div>
-          <Card className="h-full shadow-lg hover:shadow-xl transition-shadow duration-300">
+          <Card className="h-full shadow-lg hover:shadow-xl transition-shadow duration-300 cursor-pointer" onClick={() => setFilter('approved')}>
             <CardContent className="text-center">
               <CheckCircleOutline sx={{ fontSize: 40, color: '#059669', mb: 1 }} />
               <Typography variant="h4" className="font-bold mb-1" sx={{ color: '#047857' }}>
@@ -367,7 +400,7 @@ const ApprovalDashboard: React.FC = () => {
         </div>
 
         <div>
-          <Card className="h-full shadow-lg hover:shadow-xl transition-shadow duration-300">
+          <Card className="h-full shadow-lg hover:shadow-xl transition-shadow duration-300 cursor-pointer" onClick={() => setFilter('rejected')}>
             <CardContent className="text-center">
               <ErrorOutline sx={{ fontSize: 40, color: '#dc2626', mb: 1 }} />
               <Typography variant="h4" className="font-bold mb-1" sx={{ color: '#dc2626' }}>
@@ -381,7 +414,7 @@ const ApprovalDashboard: React.FC = () => {
         </div>
 
         <div>
-          <Card className="h-full shadow-lg hover:shadow-xl transition-shadow duration-300 cursor-pointer" onClick={handleNotSubmittedClick}>
+          <Card className="h-full shadow-lg hover:shadow-xl transition-shadow duration-300 cursor-pointer" onClick={() => setFilter('not-submitted')}>
             <CardContent className="text-center">
               <Schedule sx={{ fontSize: 40, color: '#f59e0b', mb: 1 }} />
               <Typography variant="h4" className="font-bold mb-1" sx={{ color: '#d97706' }}>
@@ -401,10 +434,13 @@ const ApprovalDashboard: React.FC = () => {
           <Box className="flex justify-between items-center">
             <div>
               <Typography variant="h6" className="font-semibold text-gray-800 mb-1">
-                📝 Timesheets Requiring Approval
+                {selectedStatus === 'pending' && '📝 Timesheets Requiring Approval'}
+                {selectedStatus === 'approved' && '✅ Approved Timesheets'}
+                {selectedStatus === 'rejected' && '❌ Rejected Timesheets'}
+                {selectedStatus === 'not-submitted' && '⏳ Not Submitted'}
               </Typography>
               <Typography variant="body2" color="textSecondary">
-                {enhancedTimesheets.length} timesheet{enhancedTimesheets.length !== 1 ? 's' : ''} waiting for your review
+                {(selectedStatus === 'not-submitted' ? notSubmittedData.length : enhancedTimesheets.length)} record{(selectedStatus === 'not-submitted' ? notSubmittedData.length : enhancedTimesheets.length) !== 1 ? 's' : ''} {selectedStatus}
               </Typography>
             </div>
           </Box>
@@ -424,7 +460,7 @@ const ApprovalDashboard: React.FC = () => {
               </TableRow>
             </TableHead>
             <TableBody>
-              {enhancedTimesheets.map((timesheet) => {
+              {(selectedStatus === 'not-submitted' ? notSubmittedData : enhancedTimesheets).map((timesheet) => {
                 const priorityConfig = getPriorityConfig(timesheet.totalHours || 0);
                 
                 return (
@@ -513,7 +549,7 @@ const ApprovalDashboard: React.FC = () => {
                     </TableCell>
 
                     <TableCell>
-                      {getStatusChip(timesheet.status)}
+                      {getStatusChip(selectedStatus === 'not-submitted' ? 'not-submitted' : timesheet.status)}
                     </TableCell>
 
                     <TableCell>

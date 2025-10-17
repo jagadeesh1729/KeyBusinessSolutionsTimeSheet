@@ -28,17 +28,34 @@ interface TimesheetRow {
   hours: string;
 }
 
+const sortRowsByDate = (rows: TimesheetRow[]): TimesheetRow[] => {
+  return [...rows].sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+};
+
+// Helpers to treat YYYY-MM-DD as local dates (avoid timezone shifts)
+const parseLocalYMD = (ymd: string): Date => {
+  const [y, m, d] = ymd.split('-').map((v) => parseInt(v, 10));
+  return new Date(y, (m || 1) - 1, d || 1, 0, 0, 0, 0);
+};
+
+const formatLocalYMD = (date: Date): string => {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+};
+
 const generateWeekdays = (startDate: string, endDate: string): string[] => {
   const weekdays: string[] = [];
   if (!startDate || !endDate) return weekdays;
-  const start = new Date(startDate);
-  const end = new Date(endDate);
-
-  const current = new Date(start);
-  while (current <= end) {
+  const start = parseLocalYMD(startDate);
+  const end = parseLocalYMD(endDate);
+  const current = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+  while (current.getTime() <= end.getTime()) {
     const dayOfWeek = current.getDay();
+    // Exclude Sunday (0) and Saturday (6)
     if (dayOfWeek !== 0 && dayOfWeek !== 6) {
-      weekdays.push(current.toISOString().split('T')[0]);
+      weekdays.push(formatLocalYMD(current));
     }
     current.setDate(current.getDate() + 1);
   }
@@ -47,7 +64,7 @@ const generateWeekdays = (startDate: string, endDate: string): string[] => {
 
 const formatDateForDisplay = (dateStr: string): string => {
   if (!dateStr) return 'Invalid Date';
-  const date = new Date(dateStr);
+  const date = parseLocalYMD(dateStr);
   const options: Intl.DateTimeFormatOptions = {
     weekday: 'short',
     year: 'numeric',
@@ -76,10 +93,23 @@ const TimesheetForm: React.FC<TimesheetFormProps> = ({ timesheet, project, isEdi
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [availableDates, setAvailableDates] = useState<string[]>([]);
 
+  const effectivePeriodType = useMemo(() => {
+    if (!project) return undefined;
+    const p: any = project;
+    return p.period_type ?? p.periodType ?? 'weekly';
+  }, [project]);
+
+  const isAutoApprove = useMemo(() => {
+    if (!project) return false;
+    const p: any = project;
+    const val = p.auto_approve ?? p.autoApprove;
+    if (typeof val === 'string') return val === '1' || val.toLowerCase() === 'true';
+    return Boolean(val);
+  }, [project]);
+
   const maxHours = useMemo(() => {
     const weeklyHours = user?.no_of_hours || 40;
-    const periodType = project?.periodType;
-
+    const periodType = effectivePeriodType;
     if (!periodType) return weeklyHours;
 
     switch (periodType) {
@@ -87,7 +117,7 @@ const TimesheetForm: React.FC<TimesheetFormProps> = ({ timesheet, project, isEdi
       case 'monthly': return weeklyHours * 4;
       case 'weekly': default: return weeklyHours;
     }
-  }, [user?.no_of_hours, project]);
+  }, [user?.no_of_hours, effectivePeriodType]);
 
   const canEdit = useMemo(() => {
     if (!project) return false;
@@ -110,12 +140,36 @@ const TimesheetForm: React.FC<TimesheetFormProps> = ({ timesheet, project, isEdi
         if (saved) {
           const parsed: TimesheetRow[] = JSON.parse(saved);
           if (Array.isArray(parsed) && parsed.length > 0) {
-            // FIX: Ensure all dates from a saved draft are available in the dropdown
-            const draftDates = parsed.map(row => row.date).filter(Boolean);
-            const allAvailableDates = new Set([...weekdays, ...draftDates]);
-            setAvailableDates(Array.from(allAvailableDates).sort());
+            // Keep only rows whose dates are weekdays within the period
+            const weekdaySet = new Set(weekdays);
+            const filtered = parsed.filter(row => row.date && weekdaySet.has(row.date));
 
-            setTimesheetRows(parsed);
+            // Ensure one row per weekday in the range
+            const existingDates = new Set(filtered.map(r => r.date));
+            const completed: TimesheetRow[] = [...filtered];
+            weekdays.forEach((d, idx) => {
+              if (!existingDates.has(d)) {
+                completed.push({
+                  id: `${Date.now()}-${idx}`,
+                  date: d,
+                  description: '',
+                  hours: '',
+                });
+              }
+            });
+
+            setTimesheetRows(
+              completed.length > 0
+                ? sortRowsByDate(completed)
+                : sortRowsByDate(
+                    weekdays.map((date, index) => ({
+                      id: `${Date.now()}-${index}`,
+                      date,
+                      description: '',
+                      hours: '',
+                    }))
+                  )
+            );
             return;
           }
         }
@@ -125,7 +179,9 @@ const TimesheetForm: React.FC<TimesheetFormProps> = ({ timesheet, project, isEdi
 
       if (timesheet.dailyEntries && timesheet.dailyEntries.length > 0) {
         const rows: TimesheetRow[] = [];
+        const weekdaySet = new Set(weekdays);
         timesheet.dailyEntries.forEach((dayEntry, dayIndex) => {
+          if (!weekdaySet.has(dayEntry.date)) return; // exclude weekends/out-of-range
           dayEntry.tasks.forEach((task, taskIndex) => {
             rows.push({
               id: `${dayIndex}-${taskIndex}-${Math.random()}`,
@@ -135,15 +191,41 @@ const TimesheetForm: React.FC<TimesheetFormProps> = ({ timesheet, project, isEdi
             });
           });
         });
-        setTimesheetRows(rows);
+
+        // Ensure one row per weekday in the range
+        const existingDates = new Set(rows.map(r => r.date));
+        weekdays.forEach((d, idx) => {
+          if (!existingDates.has(d)) {
+            rows.push({
+              id: `${Date.now()}-${idx}`,
+              date: d,
+              description: '',
+              hours: '',
+            });
+          }
+        });
+
+        setTimesheetRows(
+          rows.length > 0
+            ? sortRowsByDate(rows)
+            : sortRowsByDate(
+                weekdays.map((date, index) => ({
+                  id: `${Date.now()}-${index}`,
+                  date,
+                  description: '',
+                  hours: '',
+                }))
+              )
+        );
       } else {
-        const defaultRows: TimesheetRow[] = weekdays.slice(0, 5).map((date, index) => ({
+        // Default to one empty row per weekday in the period
+        const defaultRows: TimesheetRow[] = weekdays.map((date, index) => ({
           id: `${Date.now()}-${index}`,
           date: date,
           description: '',
           hours: '',
         }));
-        setTimesheetRows(defaultRows);
+        setTimesheetRows(sortRowsByDate(defaultRows));
       }
     }
   }, [project, timesheet, isEditMode, user?.userId]);
@@ -256,7 +338,7 @@ const TimesheetForm: React.FC<TimesheetFormProps> = ({ timesheet, project, isEdi
     }
 
     try {
-      const newStatus = project.autoApprove ? 'approved' : 'pending';
+      const newStatus = isAutoApprove ? 'approved' : 'pending';
       const updateData = {
         id: timesheet.id,
         periodStart: timesheet.periodStart,
@@ -345,7 +427,7 @@ const TimesheetForm: React.FC<TimesheetFormProps> = ({ timesheet, project, isEdi
             <div>
               <Typography variant="h6" className="font-semibold">{project.name}</Typography>
               <Typography variant="body2" color="textSecondary">
-                Period: {project.periodType} | Status: Active
+                Period: {effectivePeriodType} | Status: Active
                 {isEditMode && ` | Editing Timesheet ID: ${timesheet?.id}`}
               </Typography>
             </div>

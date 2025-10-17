@@ -72,8 +72,8 @@ const ProjectManagerDashboard = () => {
         <Box sx={{ flexGrow: 1, ml: 3 }}>
           <Box sx={{ bgcolor: 'background.paper', borderRadius: 2, boxShadow: 3, height: '100%', overflow: 'auto' }}>
             <TabPanel value={tabIndex} index={0}><ApprovalDashboard /></TabPanel>
-            <TabPanel value={tabIndex} index={1}><MyProjectsView /></TabPanel>
-            <TabPanel value={tabIndex} index={2}><MyTeamView /></TabPanel>
+            <TabPanel value={tabIndex} index={2}><MyProjectsView /></TabPanel>
+            <TabPanel value={tabIndex} index={1}><MyTeamView /></TabPanel>
             <TabPanel value={tabIndex} index={3}><ScheduleMeetingPage /></TabPanel>
           </Box>
         </Box>

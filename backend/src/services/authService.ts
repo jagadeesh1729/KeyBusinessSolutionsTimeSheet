@@ -11,7 +11,7 @@ import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import dotenv from 'dotenv';
 import Logger from '../utils/logger';
-import { ResultSetHeader } from 'mysql2';
+import { ResultSetHeader, RowDataPacket } from 'mysql2';
 dotenv.config();
 
 export class AuthService {
@@ -20,7 +20,7 @@ export class AuthService {
     try {
       const { email, password } = loginData;
       const users = await database.query(
-        'select id,name,email,password,role,is_active,no_of_hours from users where email = ?',
+        'SELECT id, first_name, last_name, email, password, role, is_active, no_of_hours FROM users WHERE email = ?',
         [email],
       );
       if (!Array.isArray(users) || users.length === 0) {
@@ -54,7 +54,9 @@ export class AuthService {
         token,
         user: {
           id: user.id,
-          name: user.name,
+          first_name: user.first_name,
+          last_name: user.last_name,
+          name: `${user.first_name} ${user.last_name}`.trim(),
           email: user.email,
           role: user.role,
           no_of_hours: user.no_of_hours,
@@ -161,21 +163,13 @@ export class AuthService {
     pmData: CreatePMRequest,
   ): Promise<{ success: boolean; message: string; userId?: number }> {
     try {
-      const { name, email, phone, location, no_of_hours } = pmData;
+      const { first_name, last_name, email, phone, location, no_of_hours } = pmData;
       const tempPassword = this.generateTempPassword();
       const hashedPassword = await bcrypt.hash(tempPassword, this.saltrounds);
 
       const result = (await database.query(
-        'INSERT INTO users (name, email, phone, password, role, location, no_of_hours) VALUES (?, ?, ?, ?, ?, ?, ?)',
-        [
-          name,
-          email,
-          phone,
-          hashedPassword,
-          UserRole.PROJECT_MANAGER,
-          location,
-          no_of_hours
-        ],
+        'INSERT INTO users (first_name, last_name, email, phone, password, role, location, no_of_hours) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        [ first_name, last_name, email, phone, hashedPassword, UserRole.PROJECT_MANAGER, location, no_of_hours ],
       )) as unknown as ResultSetHeader;
 
       const userId = result.insertId;
@@ -204,21 +198,22 @@ export class AuthService {
       await connection.beginTransaction();
 
       // Step 1: Create the user record
-      const { name, email, phone, password, location, no_of_hours } = employeeData;
+      const { first_name, last_name, email, phone, password, location, no_of_hours } = employeeData;
       const hashedPassword = await bcrypt.hash(password, this.saltrounds);
 
       const userResult = (await connection.query(
-        'INSERT INTO users (name, email, phone, password, role, location, no_of_hours) VALUES (?, ?, ?, ?, ?, ?, ?)',
-        [name, email, phone, hashedPassword, UserRole.EMPLOYEE, location, no_of_hours],
+        'INSERT INTO users (first_name, last_name, email, phone, password, role, location, no_of_hours) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        [first_name, last_name, email, phone, hashedPassword, UserRole.EMPLOYEE, location, no_of_hours],
       )) as [ResultSetHeader, any];
 
       const userId = userResult[0].insertId; // The ResultSetHeader is the first element in the tuple
 
       // Step 2: Create the employee record
-      const { employment_start_date, start_date, end_date, visa_status, college_name, college_address, degree, date_of_birth } = employeeData;
+      const { employment_start_date, job_start_date, start_date, end_date, visa_status, college_name, college_address, degree, date_of_birth, college_Dso_name, college_Dso_email, college_Dso_phone } = employeeData as any;
+      const employement_start = employment_start_date || job_start_date || null;
       await connection.query(
-        'INSERT INTO employees (user_id, employement_start_date, start_date, end_date, visa_status, college_name, college_address, degree, date_of_birth) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-        [userId, employment_start_date, start_date, end_date, visa_status, college_name, college_address, degree, date_of_birth],
+        'INSERT INTO employees (user_id, employement_start_date, start_date, end_date, visa_status, college_name, college_address, degree, date_of_birth, college_Dso_name, college_Dso_email, college_Dso_phone) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        [userId, employement_start, start_date, end_date, visa_status, college_name, college_address, degree, date_of_birth, college_Dso_name, college_Dso_email, college_Dso_phone],
       );
 
       await connection.commit();
@@ -272,11 +267,12 @@ export class AuthService {
       // Enhanced query to get complete employee data
       let query = `
         SELECT
-          u.id, u.name, u.email, u.phone, u.role, u.is_active, u.location, u.no_of_hours,
+          u.id, u.first_name, u.last_name, CONCAT(u.first_name,' ',u.last_name) AS name, u.email, u.phone, u.role, u.is_active, u.location, u.no_of_hours,
           e.user_id, e.employement_start_date, e.start_date, e.end_date, e.visa_status,
           e.college_name, e.college_address, e.degree, e.job_title, e.date_of_birth,
-          e.compensation, e.job_duties, e.performance_review, e.reports, e.project_manager_id,
-          pm.id as pm_id, pm.name as pm_name, pm.email as pm_email,
+          e.college_Dso_name, e.college_Dso_email, e.college_Dso_phone,
+          e.compensation, e.job_duties, e.project_manager_id,
+          pm.id as pm_id, pm.first_name as pm_first_name, pm.last_name as pm_last_name, pm.email as pm_email,
           GROUP_CONCAT(DISTINCT p.name) as project_names,
           GROUP_CONCAT(DISTINCT p.id) as project_ids
         FROM users u
@@ -294,13 +290,15 @@ export class AuthService {
         params.push(UserRole.EMPLOYEE);
       }
 
-      query += ' GROUP BY u.id, u.name, u.email, u.phone, u.role, u.is_active, u.location, u.no_of_hours, e.user_id, e.employement_start_date, e.start_date, e.end_date, e.visa_status, e.college_name, e.college_address, e.degree, e.job_title, e.date_of_birth, e.compensation, e.job_duties, e.performance_review, e.reports, e.project_manager_id, pm.id, pm.name, pm.email';
+      query += ' GROUP BY u.id, u.first_name, u.last_name, u.email, u.phone, u.role, u.is_active, u.location, u.no_of_hours, e.user_id, e.employement_start_date, e.start_date, e.end_date, e.visa_status, e.college_name, e.college_address, e.degree, e.job_title, e.date_of_birth, e.college_Dso_name, e.college_Dso_email, e.college_Dso_phone, e.compensation, e.job_duties, e.project_manager_id, pm.id, pm.first_name, pm.last_name, pm.email';
 
       const users = await database.query(query, params);
 
       // Transform the data to match expected format
       const transformedUsers = (users as any[]).map((user: any) => ({
         id: user.id,
+        first_name: user.first_name,
+        last_name: user.last_name,
         name: user.name,
         email: user.email,
         phone: user.phone,
@@ -312,6 +310,9 @@ export class AuthService {
         college_name: user.college_name,
         college_address: user.college_address,
         degree: user.degree,
+        college_Dso_name: user.college_Dso_name,
+        college_Dso_email: user.college_Dso_email,
+        college_Dso_phone: user.college_Dso_phone,
         employement_start_date: user.employement_start_date,
         start_date: user.start_date,
         end_date: user.end_date,
@@ -323,8 +324,8 @@ export class AuthService {
         reports: user.reports,
         project_manager: user.pm_id ? {
           id: user.pm_id,
-          first_name: user.pm_name ? user.pm_name.split(' ')[0] || '' : '',
-          last_name: user.pm_name ? user.pm_name.split(' ').slice(1).join(' ') || '' : '',
+          first_name: user.pm_first_name || '',
+          last_name: user.pm_last_name || '',
           email: user.pm_email
         } : null,
         project: user.project_names ? user.project_names.split(',').map((name: string, index: number) => ({
@@ -346,7 +347,7 @@ export class AuthService {
     message?: string;
   }> {
     try {
-      const query = 'SELECT id, name, email, phone, location, no_of_hours FROM users WHERE role = ?';
+      const query = 'SELECT id, first_name, last_name, CONCAT(first_name, " ", last_name) AS name, email, phone, location, no_of_hours FROM users WHERE role = ?';
       const users = await database.query(query, [UserRole.PROJECT_MANAGER]);
       return { success: true, users: users as unknown[] };
     } catch (error) {
@@ -363,12 +364,75 @@ export class AuthService {
 
       const { user_id, project_ids } = assignData;
 
+      // Determine target user's role
+      const [userRows] = await connection.query<RowDataPacket[]>(
+        'SELECT role FROM users WHERE id = ? LIMIT 1',
+        [user_id]
+      );
+      const targetRole = userRows && userRows[0] ? (userRows[0].role as UserRole) : undefined;
+
+      if (!targetRole) {
+        await connection.rollback();
+        return { success: false, message: 'Target user not found' };
+      }
+
+      if (targetRole === UserRole.PROJECT_MANAGER) {
+        // For PMs: each project can belong to only one PM
+        if (Array.isArray(project_ids) && project_ids.length > 0) {
+          const placeholders = project_ids.map(() => '?').join(',');
+          const [conflicts] = await connection.query<RowDataPacket[]>(
+            `SELECT up.project_id, u.id as pm_id, CONCAT(u.first_name,' ',u.last_name) AS pm_name
+             FROM user_projects up
+             JOIN users u ON u.id = up.user_id AND u.role = ?
+             WHERE up.project_id IN (${placeholders}) AND up.user_id <> ?`,
+            [UserRole.PROJECT_MANAGER, ...project_ids, user_id] as any
+          );
+          if (Array.isArray(conflicts) && conflicts.length > 0) {
+            const conflictProjects = conflicts.map((c: any) => c.project_id);
+            await connection.rollback();
+            return {
+              success: false,
+              message: `One or more projects are already assigned to another project manager: ${[...new Set(conflictProjects)].join(', ')}`,
+            };
+          }
+        }
+      } else if (targetRole === UserRole.EMPLOYEE) {
+        // For employees: allow only one project, and it must be one of the employee's PM's projects
+        const [empRows] = await connection.query<RowDataPacket[]>(
+          'SELECT project_manager_id FROM employees WHERE user_id = ? LIMIT 1',
+          [user_id]
+        );
+        const pmId = empRows && empRows[0] ? (empRows[0].project_manager_id as number | null) : null;
+        if (!pmId) {
+          await connection.rollback();
+          return { success: false, message: 'Employee has no assigned project manager' };
+        }
+        const selectedProjectId = Array.isArray(project_ids) && project_ids.length > 0 ? Number(project_ids[0]) : null;
+        if (!selectedProjectId) {
+          // Clearing assignments is handled by deleting below; proceed
+        } else {
+          // Verify the project is assigned to the PM
+          const [ok] = await connection.query<RowDataPacket[]>(
+            'SELECT 1 FROM user_projects WHERE user_id = ? AND project_id = ? LIMIT 1',
+            [pmId, selectedProjectId]
+          );
+          if (!ok || ok.length === 0) {
+            await connection.rollback();
+            return { success: false, message: 'Selected project is not assigned to the employee\'s project manager' };
+          }
+        }
+        // Force single project for employees
+        if (Array.isArray(project_ids) && project_ids.length > 1) {
+          assignData.project_ids = [Number(project_ids[0])];
+        }
+      }
+
       // Remove existing assignments for this user
       await connection.query('DELETE FROM user_projects WHERE user_id = ?', [user_id]);
 
       // Add new assignments
-      if (project_ids.length > 0) {
-        const values = project_ids.map(project_id => [user_id, project_id]);
+      if (assignData.project_ids && assignData.project_ids.length > 0) {
+        const values = assignData.project_ids.map(project_id => [user_id, project_id]);
         await connection.query(
           'INSERT INTO user_projects (user_id, project_id) VALUES ?',
           [values]
@@ -439,7 +503,7 @@ export class AuthService {
   ): Promise<{ success: boolean; employees?: unknown[]; message?: string }> {
     try {
       const employees = await database.query(
-        'SELECT u.id, u.name, u.email, u.phone, u.location FROM users u JOIN employees e ON u.id = e.user_id WHERE e.project_manager_id = ?',
+        'SELECT u.id, u.first_name, u.last_name, CONCAT(u.first_name, " ", u.last_name) AS name, u.email, u.phone, u.location FROM users u JOIN employees e ON u.id = e.user_id WHERE e.project_manager_id = ?',
         [pmId]
       );
       return { success: true, employees: employees as unknown[] };
@@ -452,7 +516,7 @@ export class AuthService {
   async getEmployeesWithoutPM(): Promise<{ success: boolean; employees?: unknown[]; message?: string }> {
     try {
       const employees = await database.query(
-        'SELECT u.id, u.name, u.email, u.phone, u.location FROM users u LEFT JOIN employees e ON u.id = e.user_id WHERE u.role = ? AND (e.project_manager_id IS NULL OR e.project_manager_id = 0)',
+        'SELECT u.id, u.first_name, u.last_name, CONCAT(u.first_name, " ", u.last_name) AS name, u.email, u.phone, u.location FROM users u LEFT JOIN employees e ON u.id = e.user_id WHERE u.role = ? AND (e.project_manager_id IS NULL OR e.project_manager_id = 0)',
         [UserRole.EMPLOYEE]
       );
       return { success: true, employees: employees as unknown[] };
@@ -465,16 +529,15 @@ export class AuthService {
   async getEmployeesForReview(): Promise<{ success: boolean; employees?: unknown[]; count?: number; message?: string }> {
     try {
       const employees = await database.query(
-        `SELECT u.id, u.name, u.email, u.phone, u.location, u.no_of_hours,
+        `SELECT u.id, u.first_name, u.last_name, CONCAT(u.first_name,' ',u.last_name) AS name, u.email, u.phone, u.location, u.no_of_hours,
          e.employement_start_date, e.start_date, e.end_date, e.visa_status, e.college_name, e.college_address, e.degree, e.job_title,
-         e.date_of_birth, e.compensation, e.job_duties, e.performance_review, e.reports, e.project_manager_id
+         e.date_of_birth, e.college_Dso_name, e.college_Dso_email, e.college_Dso_phone, e.compensation, e.job_duties, e.project_manager_id
          FROM users u 
          LEFT JOIN employees e ON u.id = e.user_id 
          WHERE u.role = ? AND (
            e.employement_start_date IS NULL OR e.start_date IS NULL OR e.end_date IS NULL OR e.visa_status IS NULL OR 
            e.college_name IS NULL OR e.college_address IS NULL OR e.degree IS NULL OR e.job_title IS NULL OR
-           e.date_of_birth IS NULL OR e.compensation IS NULL OR e.job_duties IS NULL OR
-           e.performance_review IS NULL OR e.reports IS NULL
+           e.date_of_birth IS NULL OR e.compensation IS NULL OR e.job_duties IS NULL
          )`,
         [UserRole.EMPLOYEE]
       );
@@ -494,18 +557,19 @@ export class AuthService {
     try {
       await connection.beginTransaction();
 
-      const { name, email, phone, location, no_of_hours, employment_start_date, start_date, end_date, visa_status, college_name, college_address, degree, job_title, date_of_birth, compensation, job_duties, performance_review, reports, project_manager_id } = employeeData;
+      const { first_name, last_name, email, phone, location, no_of_hours, employment_start_date, job_start_date, start_date, end_date, visa_status, college_name, college_address, degree, job_title, date_of_birth, compensation, job_duties, project_manager_id, college_Dso_name, college_Dso_email, college_Dso_phone } = employeeData as any;
+      const employement_start_update = employment_start_date || job_start_date || null;
 
       // Update user table
       await connection.query(
-        'UPDATE users SET name = ?, email = ?, phone = ?, location = ?, no_of_hours = ? WHERE id = ?',
-        [name, email, phone, location, no_of_hours, userId]
+        'UPDATE users SET first_name = ?, last_name = ?, email = ?, phone = ?, location = ?, no_of_hours = ? WHERE id = ?',
+        [first_name, last_name, email, phone, location, no_of_hours, userId]
       );
 
       // Update employee table
       await connection.query(
-        'UPDATE employees SET employement_start_date = ?, start_date = ?, end_date = ?, visa_status = ?, college_name = ?, college_address = ?, degree = ?, job_title = ?, date_of_birth = ?, compensation = ?, job_duties = ?, performance_review = ?, reports = ?, project_manager_id = ? WHERE user_id = ?',
-        [employment_start_date, start_date, end_date, visa_status, college_name, college_address, degree, job_title, date_of_birth, compensation, job_duties, performance_review, reports, project_manager_id, userId]
+        'UPDATE employees SET employement_start_date = ?, start_date = ?, end_date = ?, visa_status = ?, college_name = ?, college_address = ?, degree = ?, job_title = ?, date_of_birth = ?, compensation = ?, job_duties = ?, project_manager_id = ?, college_Dso_name = ?, college_Dso_email = ?, college_Dso_phone = ? WHERE user_id = ?',
+        [employement_start_update, start_date, end_date, visa_status, college_name, college_address, degree, job_title, date_of_birth, compensation, job_duties, project_manager_id, college_Dso_name, college_Dso_email, college_Dso_phone, userId]
       );
 
       await connection.commit();
@@ -523,10 +587,11 @@ export class AuthService {
     try {
       const query = `
         SELECT
-          u.id, u.name, u.email, u.phone, u.role, u.is_active, u.location, u.no_of_hours,
+          u.id, u.first_name, u.last_name, CONCAT(u.first_name,' ',u.last_name) AS name, u.email, u.phone, u.role, u.is_active, u.location, u.no_of_hours,
           e.employement_start_date, e.start_date, e.end_date, e.visa_status,
           e.college_name, e.college_address, e.degree, e.job_title, e.date_of_birth,
-          e.compensation, e.job_duties, e.performance_review, e.reports, e.project_manager_id
+          e.college_Dso_name, e.college_Dso_email, e.college_Dso_phone,
+          e.compensation, e.job_duties, e.project_manager_id
         FROM users u
         LEFT JOIN employees e ON u.id = e.user_id
         WHERE u.id = ?

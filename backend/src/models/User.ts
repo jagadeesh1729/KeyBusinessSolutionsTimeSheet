@@ -5,7 +5,8 @@ export enum UserRole {
 }
 export interface User {
   id?: number;
-  name: string;
+  first_name: string;
+  last_name: string;
   email: string;
   phone: string;
   password: string;
@@ -30,7 +31,8 @@ export interface Employee {
 
 export interface RegisterEmployeeRequest {
   // User fields
-  name: string;
+  first_name: string;
+  last_name: string;
   email: string;
   phone: string;
   password: string;
@@ -47,11 +49,15 @@ export interface RegisterEmployeeRequest {
   college_address?: string;
   degree?: string;
   date_of_birth?: string;
+  college_Dso_name?: string;
+  college_Dso_email?: string;
+  college_Dso_phone?: string;
 }
 
 
 export interface CreatePMRequest {
-  name: string;
+  first_name: string;
+  last_name: string;
   email: string;
   phone: string;
   location: string;
@@ -63,7 +69,8 @@ export interface LoginRequest {
   password: string;
 }
 export interface CreateUserRequest {
-  name: string;
+  first_name: string;
+  last_name: string;
   email: string;
   role: UserRole;
 }
@@ -89,7 +96,9 @@ export interface AuthResponse {
   token?: string;
   user?: {
     id: number;
-    name: string;
+    first_name: string;
+    last_name: string;
+    name?: string; // computed full name for compatibility
     email: string;
     role: UserRole;
     no_of_hours: number;
