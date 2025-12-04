@@ -5,6 +5,11 @@ services:
     image: mysql:8.0
     container_name: mysql-keybusiness
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: ${MYSQL_CPU_LIMIT:-"0.50"}
+          memory: ${MYSQL_MEMORY_LIMIT:-"1g"}
     env_file:
       - ./.env
     environment:
@@ -29,6 +34,11 @@ services:
       dockerfile: Dockerfile
     container_name: kbs-backend
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: ${BACKEND_CPU_LIMIT:-"0.50"}
+          memory: ${BACKEND_MEMORY_LIMIT:-"512m"}
     env_file:
       - ./.env
     environment:
@@ -57,6 +67,11 @@ services:
         VITE_LOGIN_BACKGROUND_URL: ${VITE_LOGIN_BACKGROUND_URL:-https://source.unsplash.com/random?wallpapers}
     container_name: kbs-frontend
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: ${FRONTEND_CPU_LIMIT:-"0.25"}
+          memory: ${FRONTEND_MEMORY_LIMIT:-"256m"}
     env_file:
       - ./.env
     environment:

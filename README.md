@@ -26,6 +26,9 @@ Create a `.env` file based on `.env.example` and adjust for your environment.
 | RATE_LIMIT_WINDOW_MS / RATE_LIMIT_MAX | Global rate limiting window and max requests. |
 | LOGIN_RATE_LIMIT_WINDOW_MS / LOGIN_RATE_LIMIT_MAX | Rate limiting for login endpoints. |
 | RATE_LIMIT_MAX_KEYS | Maximum unique client entries tracked by the in-memory rate limiter. |
+| MYSQL_CPU_LIMIT / MYSQL_MEMORY_LIMIT | Resource limits for the MySQL container (Compose deploy settings). |
+| BACKEND_CPU_LIMIT / BACKEND_MEMORY_LIMIT | Resource limits for the backend container. |
+| FRONTEND_CPU_LIMIT / FRONTEND_MEMORY_LIMIT | Resource limits for the frontend container. |
 | CLIENT_ID / CLIENT_SECRET / REDIRECT_URI | Google OAuth credentials. |
 | IONOS_HOST / IONOS_PORT / IONOS_USER / IONOS_PASS / IONOS_FROM | Email transport configuration. |
 | ADMIN_EMAIL | Admin notification address. |
