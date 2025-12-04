@@ -1,0 +1,91 @@
+# Production: Full stack with Nginx reverse proxy and AWS RDS
+# Usage: docker-compose -f docker-compose.prod.yaml up -d --build
+
+services:
+  # Nginx Reverse Proxy - Entry point for all traffic
+  nginx:
+    build:
+      context: ./nginx
+      dockerfile: Dockerfile
+    container_name: kbs-nginx
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: '128m'
+    ports:
+      - '80:80'
+    depends_on:
+      backend:
+        condition: service_healthy
+      frontend:
+        condition: service_started
+    healthcheck:
+      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://localhost/health']
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    networks:
+      - kbs-network
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: kbs-backend
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: '512m'
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DB_HOST: reliance-supermart-instance.ctauwae2yefg.us-west-1.rds.amazonaws.com
+      DB_PORT: 3306
+      DB_USER: root
+      DB_PASSWORD: password
+      DB_NAME: reliance_supermart
+      JWT_SECRET: your-jwt-secret-key
+      CORS_ORIGINS: http://localhost,http://localhost:80
+      RATE_LIMIT_WINDOW_MS: 900000
+      RATE_LIMIT_MAX: 100
+      LOGIN_RATE_LIMIT_WINDOW_MS: 900000
+      LOGIN_RATE_LIMIT_MAX: 10
+    expose:
+      - '3000'
+    healthcheck:
+      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://localhost:3000/health']
+      interval: 30s
+      timeout: 5s
+      retries: 5
+    networks:
+      - kbs-network
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: /api
+        VITE_BACKEND_URL: ''
+        VITE_LOGIN_BACKGROUND_URL: https://source.unsplash.com/random?wallpapers
+    container_name: kbs-frontend
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: '256m'
+    environment:
+      VITE_API_BASE_URL: /api
+    expose:
+      - '80'
+    networks:
+      - kbs-network
+
+networks:
+  kbs-network:
+    driver: bridge

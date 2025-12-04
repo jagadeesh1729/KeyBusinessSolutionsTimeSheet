@@ -1,18 +1,17 @@
 import { Router, Request, Response } from 'express';
 import nodemailer from 'nodemailer';
-import dotenv from 'dotenv';
 import { authenticate } from '../middleware/authMiddleware';
 import { requirePMOrAdmin } from '../middleware/roleMiddleware';
-
-dotenv.config();
+import env from '../config/env';
+import Logger from '../utils/logger';
 
 const router = Router();
 
 const mailer = nodemailer.createTransport({
-  host: process.env.IONOS_HOST || 'smtp.ionos.com',
-  port: parseInt(process.env.IONOS_PORT || '587', 10),
+  host: env.email.host || 'smtp.ionos.com',
+  port: env.email.port,
   secure: false,
-  auth: { user: process.env.IONOS_USER, pass: process.env.IONOS_PASS },
+  auth: { user: env.email.user, pass: env.email.pass },
 });
 
 router.post('/send', authenticate, requirePMOrAdmin, async (req: Request, res: Response) => {
@@ -21,7 +20,7 @@ router.post('/send', authenticate, requirePMOrAdmin, async (req: Request, res: R
     if (!to || !pdfBase64) {
       return res.status(400).json({ success: false, message: 'to and pdfBase64 are required' });
     }
-    const from = process.env.IONOS_FROM || process.env.IONOS_USER!;
+    const from = env.email.from || env.email.user!;
     await mailer.sendMail({
       from,
       to,
@@ -31,7 +30,7 @@ router.post('/send', authenticate, requirePMOrAdmin, async (req: Request, res: R
     });
     return res.json({ success: true });
   } catch (e: any) {
-    console.error('Offer letter email failed:', e);
+    Logger.error(`Offer letter email failed: ${e}`);
     return res.status(500).json({ success: false, message: e?.message || 'Failed to send offer letter' });
   }
 });

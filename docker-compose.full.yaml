@@ -1,0 +1,102 @@
+# Full Stack Development: All services containerized with Nginx reverse proxy
+# Usage: docker-compose -f docker-compose.full.yaml up -d --build
+# Access: http://localhost
+
+services:
+  # Nginx Reverse Proxy - Entry point for all traffic
+  nginx:
+    build:
+      context: ./nginx
+      dockerfile: Dockerfile
+    container_name: kbs-nginx
+    restart: unless-stopped
+    ports:
+      - '80:80'
+    depends_on:
+      backend:
+        condition: service_healthy
+      frontend:
+        condition: service_started
+    healthcheck:
+      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://localhost/health']
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    networks:
+      - kbs-network
+
+  mysql:
+    image: mysql:8.0
+    container_name: mysql-keybusiness
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: keybusiness
+      MYSQL_USER: appuser
+      MYSQL_PASSWORD: apppassword
+    volumes:
+      - db_data:/var/lib/mysql
+    healthcheck:
+      test: ['CMD', 'mysqladmin', 'ping', '-h', 'localhost']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - kbs-network
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: kbs-backend
+    restart: unless-stopped
+    environment:
+      NODE_ENV: development
+      PORT: 3000
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_USER: appuser
+      DB_PASSWORD: apppassword
+      DB_NAME: keybusiness
+      JWT_SECRET: dev-jwt-secret-key
+      CORS_ORIGINS: http://localhost,http://localhost:80
+      RATE_LIMIT_WINDOW_MS: 900000
+      RATE_LIMIT_MAX: 1000
+      LOGIN_RATE_LIMIT_WINDOW_MS: 900000
+      LOGIN_RATE_LIMIT_MAX: 50
+    expose:
+      - '3000'
+    depends_on:
+      mysql:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://localhost:3000/health']
+      interval: 30s
+      timeout: 5s
+      retries: 5
+    networks:
+      - kbs-network
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: /api
+        VITE_BACKEND_URL: ''
+        VITE_LOGIN_BACKGROUND_URL: https://source.unsplash.com/random?wallpapers
+    container_name: kbs-frontend
+    restart: unless-stopped
+    environment:
+      VITE_API_BASE_URL: /api
+    expose:
+      - '80'
+    networks:
+      - kbs-network
+
+volumes:
+  db_data:
+
+networks:
+  kbs-network:
+    driver: bridge

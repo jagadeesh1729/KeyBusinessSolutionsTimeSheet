@@ -1,4 +1,5 @@
 import winston from 'winston';
+import env from '../config/env';
 
 // Define log levels
 const levels = {
@@ -7,12 +8,6 @@ const levels = {
   info: 2,
   http: 3,
   debug: 4,
-};
-
-// Define level based on environment
-const getLogLevel = () => {
-  const environment = 'development';
-  return environment === 'development' ? 'debug' : 'warn';
 };
 
 // Define colors for each level
@@ -48,7 +43,7 @@ const transports = [
 
 // Create the logger
 const Logger = winston.createLogger({
-  level: getLogLevel(),
+  level: env.logLevel,
   levels,
   format,
   transports,

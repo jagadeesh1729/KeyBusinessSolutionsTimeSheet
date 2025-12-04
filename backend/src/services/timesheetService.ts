@@ -8,8 +8,331 @@ import {
   TimesheetStatus,
   DailyEntry
 } from '../models/Timesheet';
+import { Client } from '@microsoft/microsoft-graph-client';
+import { ClientSecretCredential } from '@azure/identity';
+import 'isomorphic-fetch';
+import PDFDocument from 'pdfkit';
+import * as path from 'path';
+import * as fs from 'fs';
 
 export class TimesheetService {
+  // Simple Graph email helper (non-blocking, best-effort)
+  private tenantId = process.env.MS_TENANT_ID;
+  private clientId = process.env.MS_CLIENT_ID;
+  private clientSecret = process.env.MS_CLIENT_SECRET;
+  private fromEmail = 'Timesheet@keybusinessglobal.com';
+
+  private async getGraphClient() {
+    if (!this.tenantId || !this.clientId || !this.clientSecret) {
+      console.warn('Email env vars missing; skip sending approval email.');
+      return null;
+    }
+    const credential = new ClientSecretCredential(this.tenantId, this.clientId, this.clientSecret);
+    const token = await credential.getToken('https://graph.microsoft.com/.default');
+    if (!token) return null;
+    return Client.init({
+      authProvider: (done: (err: Error | null, token: string | null) => void) => done(null, token.token),
+    });
+  }
+
+  private formatDate(dateStr: string) {
+    if (!dateStr) return 'N/A';
+    const d = new Date(dateStr);
+    if (Number.isNaN(d.getTime())) return dateStr;
+    return d.toISOString().split('T')[0];
+  }
+
+  private formatDatePretty(dateStr: string) {
+    if (!dateStr) return 'N/A';
+    const d = new Date(dateStr);
+    if (Number.isNaN(d.getTime())) return dateStr;
+    return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+  }
+
+  private buildPdf(timesheet: any): Promise<Buffer> {
+    return new Promise((resolve, reject) => {
+      try {
+        const doc = new PDFDocument({ margin: 50, size: 'A4' });
+        const chunks: Buffer[] = [];
+        doc.on('data', (c: Buffer) => chunks.push(c));
+        doc.on('end', () => resolve(Buffer.concat(chunks)));
+        doc.on('error', reject);
+
+        const projectCode = timesheet.project_code || timesheet.project?.code || 'Project';
+        const projectName = timesheet.project_name || timesheet.project?.name || projectCode;
+        const clientAddress = timesheet.client_address || timesheet.project?.client_address || 'N/A';
+        const periodStart = this.formatDatePretty(timesheet.period_start);
+        const periodEnd = this.formatDatePretty(timesheet.period_end);
+        const employeeName = timesheet.employee_name || 'N/A';
+        const employeeEmail = timesheet.employee_email || 'N/A';
+        const timesheetId = timesheet.id?.toString().padStart(6, '0') || '000000';
+        const totalHours = timesheet.total_hours ?? timesheet.totalHours ?? 0;
+
+        // Colors
+        const primaryColor = '#1a1a1a';
+        const secondaryColor = '#4a5568';
+        const borderColor = '#e2e8f0';
+        
+        // Get auto_approve/signature settings
+        const autoApprove = timesheet.auto_approve ?? timesheet.project?.auto_approve ?? false;
+
+        // ===== HEADER SECTION WITH LOGO =====
+        // Try to load logo - use process.cwd() for reliable path resolution
+        const logoPath = path.join(process.cwd(), '..', 'frontend', 'public', 'KeyLogo.png');
+        const altLogoPath = path.join(process.cwd(), 'frontend', 'public', 'KeyLogo.png');
+        const signaturePath = path.join(process.cwd(), '..', 'frontend', 'public', 'sign.png');
+        const altSignaturePath = path.join(process.cwd(), 'frontend', 'public', 'sign.png');
+        
+        let logoLoaded = false;
+        try {
+          if (fs.existsSync(logoPath)) {
+            doc.image(logoPath, 50, 40, { width: 120 });
+            logoLoaded = true;
+          } else if (fs.existsSync(altLogoPath)) {
+            doc.image(altLogoPath, 50, 40, { width: 120 });
+            logoLoaded = true;
+          }
+        } catch (logoErr) {
+          console.warn('Could not load logo for PDF:', logoErr);
+        }
+        
+        if (!logoLoaded) {
+          console.warn('Logo not found at:', logoPath, 'or', altLogoPath);
+        }
+
+        doc.fontSize(24).fillColor(primaryColor).font('Helvetica-Bold')
+           .text('TIMESHEET', 300, 50, { align: 'right', width: 245 });
+        doc.fontSize(11).fillColor(secondaryColor).font('Helvetica')
+           .text(`#TS-${timesheetId}`, 300, 78, { align: 'right', width: 245 });
+        
+        // Header line
+        doc.moveTo(50, 100).lineTo(545, 100).strokeColor(primaryColor).lineWidth(2).stroke();
+        doc.moveDown(2);
+
+        // ===== METADATA SECTION =====
+        const metaStartY = 120;
+        
+        // Employee Column
+        doc.fontSize(9).fillColor(secondaryColor).font('Helvetica-Bold')
+           .text('EMPLOYEE', 50, metaStartY);
+        doc.moveTo(50, metaStartY + 15).lineTo(280, metaStartY + 15).strokeColor(borderColor).lineWidth(1).stroke();
+        
+        doc.fontSize(10).fillColor(secondaryColor).font('Helvetica')
+           .text('Name:', 50, metaStartY + 25);
+        doc.fillColor(primaryColor).font('Helvetica-Bold')
+           .text(employeeName, 120, metaStartY + 25);
+        
+        doc.fillColor(secondaryColor).font('Helvetica')
+           .text('Email:', 50, metaStartY + 42);
+        doc.fillColor(primaryColor).font('Helvetica-Bold')
+           .text(employeeEmail, 120, metaStartY + 42);
+
+        // Project Column
+        doc.fontSize(9).fillColor(secondaryColor).font('Helvetica-Bold')
+           .text('PROJECT DETAILS', 300, metaStartY);
+        doc.moveTo(300, metaStartY + 15).lineTo(545, metaStartY + 15).strokeColor(borderColor).lineWidth(1).stroke();
+        
+        doc.fontSize(10).fillColor(secondaryColor).font('Helvetica')
+           .text('Project:', 300, metaStartY + 25);
+        doc.fillColor(primaryColor).font('Helvetica-Bold')
+           .text(projectCode, 380, metaStartY + 25);
+        
+        doc.fillColor(secondaryColor).font('Helvetica')
+           .text('Client Address:', 300, metaStartY + 42);
+        doc.fillColor(primaryColor).font('Helvetica-Bold')
+           .text(clientAddress.length > 30 ? clientAddress.substring(0, 30) + '...' : clientAddress, 380, metaStartY + 42);
+        
+        doc.fillColor(secondaryColor).font('Helvetica')
+           .text('Start Date:', 300, metaStartY + 59);
+        doc.fillColor(primaryColor).font('Helvetica-Bold')
+           .text(periodStart, 380, metaStartY + 59);
+        
+        doc.fillColor(secondaryColor).font('Helvetica')
+           .text('End Date:', 300, metaStartY + 76);
+        doc.fillColor(primaryColor).font('Helvetica-Bold')
+           .text(periodEnd, 380, metaStartY + 76);
+
+        // ===== TABLE SECTION =====
+        const tableTop = metaStartY + 120;
+        const colDate = 50;
+        const colDesc = 130;
+        const colHours = 480;
+
+        // Table Header
+        doc.rect(50, tableTop, 495, 25).fillColor('#f7fafc').fill();
+        doc.moveTo(50, tableTop).lineTo(545, tableTop).strokeColor(primaryColor).lineWidth(1).stroke();
+        doc.moveTo(50, tableTop + 25).lineTo(545, tableTop + 25).strokeColor(primaryColor).lineWidth(1).stroke();
+        
+        doc.fontSize(9).fillColor(primaryColor).font('Helvetica-Bold')
+           .text('DATE', colDate + 5, tableTop + 8)
+           .text('DESCRIPTION', colDesc + 5, tableTop + 8)
+           .text('HOURS', colHours, tableTop + 8, { width: 60, align: 'right' });
+
+        // Daily entries
+        const rawEntries = timesheet.daily_entries;
+        let entries: any[] = [];
+        try {
+          if (typeof rawEntries === 'string') {
+            const parsed = JSON.parse(rawEntries);
+            entries = parsed.entries || parsed || [];
+          } else if (rawEntries?.entries) {
+            entries = rawEntries.entries;
+          } else if (Array.isArray(rawEntries)) {
+            entries = rawEntries;
+          }
+        } catch {
+          entries = [];
+        }
+
+        let rowY = tableTop + 30;
+        doc.font('Helvetica').fontSize(10);
+
+        if (!entries.length) {
+          doc.fillColor(secondaryColor).text('No entries found.', colDate + 5, rowY + 5, { width: 490, align: 'center' });
+          rowY += 30;
+        } else {
+          entries.forEach((day: any) => {
+            const dateLabel = this.formatDatePretty(day.date);
+            if (Array.isArray(day.tasks) && day.tasks.length) {
+              day.tasks.forEach((t: any, idx: number) => {
+                // Date column - only show on first task of day
+                if (idx === 0) {
+                  doc.fillColor(primaryColor).text(dateLabel, colDate + 5, rowY + 5);
+                }
+                // Description
+                doc.fillColor(primaryColor).text(t.name || 'Task', colDesc + 5, rowY + 5, { width: 340 });
+                // Hours
+                doc.text((t.hours ?? 0).toFixed(2), colHours, rowY + 5, { width: 60, align: 'right' });
+                
+                // Row border
+                doc.moveTo(50, rowY + 22).lineTo(545, rowY + 22).strokeColor(borderColor).lineWidth(0.5).stroke();
+                rowY += 25;
+              });
+            } else {
+              doc.fillColor(primaryColor).text(dateLabel, colDate + 5, rowY + 5);
+              doc.text('-', colDesc + 5, rowY + 5);
+              doc.text((day.hours ?? 0).toFixed(2), colHours, rowY + 5, { width: 60, align: 'right' });
+              doc.moveTo(50, rowY + 22).lineTo(545, rowY + 22).strokeColor(borderColor).lineWidth(0.5).stroke();
+              rowY += 25;
+            }
+          });
+        }
+
+        // Total Row
+        doc.moveTo(50, rowY).lineTo(545, rowY).strokeColor(primaryColor).lineWidth(2).stroke();
+        rowY += 10;
+        doc.fontSize(12).font('Helvetica-Bold').fillColor(primaryColor)
+           .text('Total Hours Recorded', colDate + 5, rowY, { width: 420, align: 'right' })
+           .text(Number(totalHours).toFixed(2), colHours, rowY, { width: 60, align: 'right' });
+
+        // ===== SIGNATURE SECTION =====
+        const signY = rowY + 60;
+        
+        // Employee Signature
+        doc.moveTo(50, signY).lineTo(250, signY).strokeColor(primaryColor).lineWidth(1).stroke();
+        doc.fontSize(9).fillColor(secondaryColor).font('Helvetica')
+           .text('Employee Signature', 50, signY + 8);
+        
+        // Approver Signature - add signature image if auto_approve is enabled
+        if (autoApprove) {
+          try {
+            if (fs.existsSync(signaturePath)) {
+              doc.image(signaturePath, 300, signY - 45, { width: 80 });
+            } else if (fs.existsSync(altSignaturePath)) {
+              doc.image(altSignaturePath, 300, signY - 45, { width: 80 });
+            }
+          } catch (signErr) {
+            console.warn('Could not load signature for PDF:', signErr);
+          }
+        }
+        doc.moveTo(300, signY).lineTo(545, signY).strokeColor(primaryColor).lineWidth(1).stroke();
+        doc.fontSize(9).fillColor(secondaryColor).font('Helvetica')
+           .text('Approver Signature', 300, signY + 8);
+
+        // ===== FOOTER =====
+        // Position footer dynamically after signature, ensuring it stays on same page
+        const footerY = signY + 60;
+        doc.moveTo(50, footerY).lineTo(545, footerY).strokeColor(borderColor).lineWidth(1).stroke();
+        doc.fontSize(8).fillColor('#999999').font('Helvetica-Bold')
+           .text('Corporate Office', 50, footerY + 8, { width: 495, align: 'center', lineBreak: false });
+        doc.font('Helvetica')
+           .text('4738 Duckhorn Drive, Sacramento, CA 95834 | (916) 646 2080 | info@keybusinessglobal.com', 50, footerY + 20, { width: 495, align: 'center', lineBreak: false });
+        doc.text(`Generated on ${new Date().toLocaleDateString()} | Page 1 of 1`, 50, footerY + 32, { width: 495, align: 'center', lineBreak: false });
+
+        doc.end();
+      } catch (err) {
+        reject(err);
+      }
+    });
+  }
+
+  private async sendApprovalEmail(employeeId: number, timesheet: any, autoApproved: boolean) {
+    try {
+      const client = await this.getGraphClient();
+      if (!client) {
+        console.warn('Approval email skipped: Graph client unavailable (check MS_TENANT_ID / MS_CLIENT_ID / MS_CLIENT_SECRET).');
+        return;
+      }
+
+      const userRows = (await database.query(
+        `SELECT u.email, CONCAT(u.first_name,' ',u.last_name) as name
+         FROM employees e
+         JOIN users u ON e.user_id = u.id
+         WHERE e.id = ?
+         LIMIT 1`,
+        [employeeId]
+      )) as RowDataPacket[];
+
+      if (!userRows.length || !userRows[0].email) {
+        console.warn(`Approval email skipped: employee ${employeeId} email not found.`);
+        return;
+      }
+
+      const to = userRows[0].email;
+      const name = userRows[0].name || 'Employee';
+      const projectCode = timesheet.project_code || timesheet.project?.code || 'Project';
+      const periodStart = this.formatDate(timesheet.period_start);
+      const periodEnd = this.formatDate(timesheet.period_end);
+      const subject = `Timesheet Approved - ${projectCode} (${periodStart} to ${periodEnd})`;
+      const htmlBody = `
+        <p>Hi ${name},</p>
+        <p>Your timesheet for project code <strong>${projectCode}</strong> covering <strong>${periodStart}</strong> to <strong>${periodEnd}</strong> has been approved${autoApproved ? ' automatically' : ''}.</p>
+        <p>A PDF copy is attached for your records.</p>
+        <p>Thank you,<br/>Timesheet System</p>
+      `;
+
+      let pdfBuffer: Buffer | null = null;
+      try {
+        pdfBuffer = await this.buildPdf(timesheet);
+      } catch (pdfErr: any) {
+        console.warn('Approval email: failed to build PDF attachment:', pdfErr?.message || String(pdfErr));
+      }
+
+      const attachments = pdfBuffer
+        ? [{
+            '@odata.type': '#microsoft.graph.fileAttachment',
+            name: `Timesheet-${projectCode}-${periodStart}.pdf`,
+            contentType: 'application/pdf',
+            contentBytes: pdfBuffer.toString('base64'),
+          }]
+        : undefined;
+
+      await client.api(`/users/${this.fromEmail}/sendMail`).post({
+        message: {
+          subject,
+          body: { contentType: 'HTML', content: htmlBody },
+          toRecipients: [{ emailAddress: { address: to } }],
+          from: { emailAddress: { address: this.fromEmail } },
+          attachments,
+        },
+        saveToSentItems: true,
+      });
+      console.info(`Approval email queued to ${to} for ${projectCode} (${periodStart} - ${periodEnd}), autoApproved=${autoApproved}`);
+    } catch (err: any) {
+      console.warn('Failed to send approval email:', err?.message || String(err));
+    }
+  }
+
   private resolveRange(range?: string, startDate?: string, endDate?: string): { start?: string; end?: string } {
     if (startDate && endDate) return { start: startDate, end: endDate };
     const now = new Date();
@@ -79,9 +402,13 @@ export class TimesheetService {
         `SELECT 
            t.*,
            p.name as project_name, 
+           p.code as project_code,
+           p.client_address,
            p.period_type,
            p.auto_approve,
-           CONCAT(u.first_name,' ',u.last_name) as employee_name 
+           p.signature_required,
+           CONCAT(u.first_name,' ',u.last_name) as employee_name,
+           u.email as employee_email
          FROM timesheets t 
          JOIN projects p ON t.project_id = p.id 
          JOIN employees e ON t.employee_id = e.id
@@ -103,8 +430,11 @@ export class TimesheetService {
         `SELECT 
            t.*,
            p.name as project_name, 
+           p.code as project_code,
+           p.client_address,
            p.period_type,
            p.auto_approve,
+           p.signature_required,
            CONCAT(u.first_name,' ',u.last_name) as employee_name 
          FROM timesheets t 
          JOIN projects p ON t.project_id = p.id 
@@ -160,6 +490,14 @@ export class TimesheetService {
         dailyEntries: []
       });
       
+      // Fetch the newly created timesheet to get all details including project code
+      if (newTimesheet.success && newTimesheet.timesheet) {
+        const fetchedNew = await this.getTimesheetById(newTimesheet.timesheet.id, employeeId);
+        if (fetchedNew.success) {
+          return fetchedNew;
+        }
+      }
+
       return newTimesheet;
     } catch (error) {
       console.error('Get current timesheet error:', error);
@@ -174,9 +512,12 @@ export class TimesheetService {
         `SELECT 
            t.*,
            p.name as project_name,
+           p.code as project_code,
+           p.client_address,
            p.period_type,
            p.auto_approve,
-           CONCAT(u.first_name,' ',u.last_name) as employee_name 
+           p.signature_required,
+           CONCAT(u.first_name,' ',u.last_name) as employee_name
          FROM timesheets t 
          JOIN projects p ON t.project_id = p.id 
          JOIN employees e ON t.employee_id = e.id
@@ -204,9 +545,13 @@ export class TimesheetService {
         `SELECT 
            t.*,
            p.name as project_name,
+           p.code as project_code,
+           p.client_address,
            p.period_type,
            p.auto_approve,
-           CONCAT(u.first_name,' ',u.last_name) as employee_name
+           p.signature_required,
+           CONCAT(u.first_name,' ',u.last_name) as employee_name,
+           u.email as employee_email
          FROM timesheets t 
          JOIN projects p ON t.project_id = p.id 
          JOIN employees e ON t.employee_id = e.id
@@ -229,6 +574,8 @@ export class TimesheetService {
         `SELECT 
            t.*,
            p.name as project_name,
+           p.code as project_code,
+           p.client_address,
            p.period_type,
            p.auto_approve
          FROM timesheets t 
@@ -288,6 +635,7 @@ export class TimesheetService {
       if (!existingTimesheet.success || !existingTimesheet.timesheet) {
         return { success: false, message: 'Timesheet not found' };
       }
+      const prevStatus = existingTimesheet.timesheet.status;
       
       // Check if timesheet can be edited
       if (existingTimesheet.timesheet.status !== 'draft' && existingTimesheet.timesheet.status !== 'rejected') {
@@ -309,7 +657,15 @@ export class TimesheetService {
       );
       
       // Return updated timesheet
-      return await this.getTimesheetById(id, employeeId);
+      const updated = await this.getTimesheetById(id, employeeId);
+
+      // If status changed to approved here (e.g., manual PUT), send approval email
+      if (newStatus === 'approved' && prevStatus !== 'approved' && updated.success && updated.timesheet) {
+        const ts: any = updated.timesheet;
+        this.sendApprovalEmail(employeeId, ts, Boolean(ts.auto_approve)).catch(() => null);
+      }
+
+      return updated;
     } catch (error) {
       console.error('Update timesheet error:', error);
       return { success: false, message: 'Failed to update timesheet' };
@@ -328,7 +684,8 @@ export class TimesheetService {
         `SELECT 
            t.*,
            p.auto_approve,
-           p.period_type 
+           p.period_type,
+           p.name as project_name
          FROM timesheets t 
          JOIN projects p ON t.project_id = p.id 
          WHERE t.id = ? AND t.employee_id = ? FOR UPDATE`,
@@ -378,7 +735,15 @@ export class TimesheetService {
       await connection.commit();
       
       // Return updated timesheet
-      return await this.getTimesheetById(id, employeeId);
+      const updated = await this.getTimesheetById(id, employeeId);
+
+      // Send approval email if auto-approved
+      if (newStatus === 'approved') {
+        console.info(`Timesheet ${id} auto-approved; sending approval email.`);
+        this.sendApprovalEmail(employeeId, updated.timesheet || timesheet, true).catch(() => null);
+      }
+
+      return updated;
     } catch (error) {
       await connection.rollback();
       console.error('Submit timesheet error:', error);
@@ -488,7 +853,13 @@ export class TimesheetService {
       
       if (timesheetRows.length > 0) {
         const employeeId = timesheetRows[0].employee_id;
-        return await this.getTimesheetById(id, employeeId);
+        const tsResult = await this.getTimesheetById(id, employeeId);
+        if (tsResult.success && tsResult.timesheet) {
+          const ts: any = tsResult.timesheet;
+          console.info(`Timesheet ${id} approved by manager ${managerId}; sending approval email.`);
+          this.sendApprovalEmail(employeeId, ts, false).catch(() => null);
+        }
+        return tsResult;
       }
       
       return { success: false, message: 'Failed to approve timesheet' };
@@ -602,8 +973,10 @@ export class TimesheetService {
         `SELECT 
            p.id,
            p.name,
+           p.code,
            p.period_type,
            p.auto_approve,
+           p.signature_required,
            p.status
          FROM user_projects up
          JOIN projects p ON up.project_id = p.id
@@ -670,18 +1043,21 @@ export class TimesheetService {
       
       // Get count of employees who haven't submitted (no timesheet or status = 'draft')
       const notSubmittedRows = (await database.query(
-        `SELECT COUNT(DISTINCT e.id) as count
-         FROM user_projects up1
-         JOIN projects p ON up1.project_id = p.id
-         JOIN user_projects up2 ON up2.project_id = p.id
-         JOIN employees e ON up2.user_id = e.user_id
+        `SELECT COUNT(DISTINCT CONCAT(e.id, '-', p.id)) as count
+         FROM employees e
+         JOIN users u ON e.user_id = u.id
+         JOIN user_projects emp_up ON emp_up.user_id = u.id
+         JOIN projects p ON emp_up.project_id = p.id AND p.status = 'Active'
+         JOIN user_projects mgr_up ON mgr_up.project_id = p.id AND mgr_up.user_id = ?
          LEFT JOIN timesheets t ON t.employee_id = e.id AND t.project_id = p.id
-         WHERE up1.user_id = ? AND p.status = 'Active' 
+         WHERE u.role = 'employee'
+           AND u.id != ?
            AND (t.id IS NULL OR t.status = 'draft')`,
-        [managerId]
+        [managerId, managerId]
       )) as RowDataPacket[];
       
       const notSubmitted = notSubmittedRows[0]?.count || 0;
+      console.log('getPMStats notSubmitted count:', notSubmitted, 'for managerId:', managerId);
       
       return {
         success: true,
@@ -732,7 +1108,7 @@ export class TimesheetService {
          JOIN user_projects up2 ON up2.project_id = p.id
          JOIN employees e ON up2.user_id = e.user_id
          JOIN users u ON e.user_id = u.id
-         WHERE up1.user_id = ? AND p.status = 'Active'
+         WHERE up1.user_id = ? AND p.status = 'Active' AND u.is_active = 1
          ORDER BY u.first_name, u.last_name`,
         [managerId]
       )) as RowDataPacket[];
@@ -760,23 +1136,45 @@ export class TimesheetService {
   }
 
   // Get employees who haven't submitted (no timesheet or status = 'draft')
+  // Returns data structure consistent with timesheet list for frontend display
   async getEmployeesNotSubmitted(managerId: number): Promise<{ success: boolean; employees?: any[]; message?: string }> {
     try {
+      console.log('getEmployeesNotSubmitted called for managerId:', managerId);
+      
+      // First, get all employees assigned to projects managed by this manager
+      // Then filter to those who either have no timesheet or have draft status
       const rows = (await database.query(
-        `SELECT DISTINCT u.id, CONCAT(u.first_name,' ',u.last_name) AS name, u.first_name, u.last_name, u.email, p.name as project_name, 
-           COALESCE(t.status, 'not_created') as timesheet_status
-         FROM user_projects up1
-         JOIN projects p ON up1.project_id = p.id
-         JOIN user_projects up2 ON up2.project_id = p.id
-         JOIN employees e ON up2.user_id = e.user_id
+        `SELECT DISTINCT 
+           CONCAT(e.id, '-', p.id) as id,
+           e.id as employee_id,
+           p.id as project_id,
+           CONCAT(u.first_name, ' ', u.last_name) AS employee_name, 
+           u.email as employee_email,
+           p.name as project_name,
+           p.period_type,
+           p.auto_approve,
+           t.period_start,
+           t.period_end,
+           COALESCE(t.total_hours, 0) as total_hours,
+           COALESCE(t.status, 'not_created') as status,
+           COALESCE(t.status, 'not_created') as timesheet_status,
+           t.submitted_at,
+           t.daily_entries,
+           t.id as timesheet_id
+         FROM employees e
          JOIN users u ON e.user_id = u.id
+         JOIN user_projects emp_up ON emp_up.user_id = u.id
+         JOIN projects p ON emp_up.project_id = p.id AND p.status = 'Active'
+         JOIN user_projects mgr_up ON mgr_up.project_id = p.id AND mgr_up.user_id = ?
          LEFT JOIN timesheets t ON t.employee_id = e.id AND t.project_id = p.id
-         WHERE up1.user_id = ? AND p.status = 'Active' 
+         WHERE u.role = 'employee'
+           AND u.id != ?
            AND (t.id IS NULL OR t.status = 'draft')
          ORDER BY u.first_name, u.last_name, p.name`,
-        [managerId]
+        [managerId, managerId]
       )) as RowDataPacket[];
       
+      console.log('getEmployeesNotSubmitted found rows:', rows.length, rows);
       return { success: true, employees: rows };
     } catch (error) {
       console.error('Get employees not submitted error:', error);
@@ -791,7 +1189,7 @@ export class TimesheetService {
       const resolved = this.resolveRange(range, startDate, endDate);
       const dateFilter = resolved.start && resolved.end ? ` AND t.period_start >= ? AND t.period_end <= ?` : '';
       const dfParams = resolved.start && resolved.end ? [resolved.start, resolved.end] : [];
-      
+
       // Get total employees managed by this PM
       const employeeRows = (await database.query(
         `SELECT COUNT(DISTINCT e.id) as total_employees
@@ -802,7 +1200,23 @@ export class TimesheetService {
          WHERE up1.user_id = ? AND p.status = 'Active'`,
         [managerId]
       )) as RowDataPacket[];
-      
+
+      // Get total active projects managed by this PM
+      const projectRows = (await database.query(
+        `SELECT COUNT(DISTINCT p.id) as total_projects
+         FROM user_projects up
+         JOIN projects p ON up.project_id = p.id
+         WHERE up.user_id = ? AND p.status = 'Active'`,
+        [managerId]
+      )) as RowDataPacket[];
+
+      // Get total project managers (system-wide) for consistency with admin view
+      const pmRows = (await database.query(
+        `SELECT COUNT(*) as total_project_managers
+         FROM users u
+         WHERE u.role = 'project_manager' AND u.is_active = 1`
+      )) as RowDataPacket[];
+
       // Get timesheet counts
       const filledRows = (await database.query(
         `SELECT COUNT(*) as filled_timesheets
@@ -836,13 +1250,31 @@ export class TimesheetService {
          FROM timesheets t
          JOIN projects p ON t.project_id = p.id
          JOIN user_projects up ON up.project_id = p.id
-         WHERE up.user_id = ? AND t.status = 'rejected'${dateFilter}`,
+        WHERE up.user_id = ? AND t.status = 'rejected'${dateFilter}`,
         [managerId, ...dfParams]
       )) as RowDataPacket[];
-      
+
+      const draftRows = (await database.query(
+        `SELECT COUNT(*) as draft_timesheets
+         FROM timesheets t
+         JOIN projects p ON t.project_id = p.id
+         JOIN user_projects up ON up.project_id = p.id
+         WHERE up.user_id = ? AND t.status = 'draft'${dateFilter}`,
+        [managerId, ...dfParams]
+      )) as RowDataPacket[];
+
+      const totalHoursRows = (await database.query(
+        `SELECT COALESCE(SUM(t.total_hours), 0) as total_hours_logged
+         FROM timesheets t
+         JOIN projects p ON t.project_id = p.id
+         JOIN user_projects up ON up.project_id = p.id
+         WHERE up.user_id = ?${dateFilter}`,
+        [managerId, ...dfParams]
+      )) as RowDataPacket[];
+
       // Get project statistics
       const projectStatsRows = (await database.query(
-        `SELECT 
+        `SELECT
           p.id as projectId,
           p.name as projectName,
           COUNT(DISTINCT up2.user_id) as totalAssigned,
@@ -858,16 +1290,20 @@ export class TimesheetService {
         ORDER BY p.name`,
         [...(dateFilter ? dfParams : []), managerId]
       )) as RowDataPacket[];
-      
+
       const dashboardData = {
         totalEmployees: employeeRows[0]?.total_employees || 0,
+        totalProjects: projectRows[0]?.total_projects || 0,
+        totalProjectManagers: pmRows[0]?.total_project_managers || 0,
         filledTimesheets: filledRows[0]?.filled_timesheets || 0,
         pendingApproval: pendingRows[0]?.pending_approval || 0,
         approvedTimesheets: approvedRows[0]?.approved_timesheets || 0,
         rejectedTimesheets: rejectedRows[0]?.rejected_timesheets || 0,
+        draftTimesheets: draftRows[0]?.draft_timesheets || 0,
+        totalHoursLogged: Number(totalHoursRows[0]?.total_hours_logged || 0),
         projectStats: projectStatsRows
       };
-      
+
       console.log('Dashboard data:', dashboardData);
       
       return { success: true, data: dashboardData };
@@ -965,81 +1401,99 @@ export class TimesheetService {
     try {
       const { range, startDate, endDate } = params;
       const resolved = this.resolveRange(range, startDate, endDate);
-      const dateFilter = resolved.start && resolved.end ? ` AND t.period_start >= ? AND t.period_end <= ?` : '';
-      const dfParams = resolved.start && resolved.end ? [resolved.start, resolved.end] : [];
-      // Total employees in the system
+      const hasDateFilter = resolved.start && resolved.end;
+      const dateFilter = hasDateFilter ? ' AND t.period_start <= ? AND t.period_end >= ?' : '';
+      const dfParams = hasDateFilter ? [resolved.end!, resolved.start!] : [];
+
+      // Total employees in the system (users who have employee records)
       const employeeRows = (await database.query(
         `SELECT COUNT(DISTINCT e.id) as total_employees
-         FROM employees e`
+         FROM employees e
+         JOIN users u ON e.user_id = u.id
+         WHERE u.is_active = 1`
       )) as RowDataPacket[];
 
-      // Timesheet counts (global)
-      const filledRows = (await database.query(
-        `SELECT COUNT(*) as filled_timesheets
-         FROM timesheets t
-         WHERE t.status IN ('pending', 'approved')${dateFilter}`,
-        dfParams
-      )) as RowDataPacket[];
-
-      const pendingRows = (await database.query(
-        `SELECT COUNT(*) as pending_approval
-         FROM timesheets t
-         WHERE t.status = 'pending'${dateFilter}`,
-        dfParams
-      )) as RowDataPacket[];
-
-      const approvedRows = (await database.query(
-        `SELECT COUNT(*) as approved_timesheets
-         FROM timesheets t
-         WHERE t.status = 'approved'${dateFilter}`,
-        dfParams
-      )) as RowDataPacket[];
-
-      const rejectedRows = (await database.query(
-        `SELECT COUNT(*) as rejected_timesheets
-         FROM timesheets t
-         WHERE t.status = 'rejected'${dateFilter}`,
-        dfParams
-      )) as RowDataPacket[];
-
-      // Employees assigned to active projects who have not submitted (no timesheet or only draft)
-      const notSubmittedRows = (await database.query(
-        `SELECT COUNT(DISTINCT e.id) as count
+      // Total active projects
+      const projectRows = (await database.query(
+        `SELECT COUNT(*) as total_projects
          FROM projects p
-         JOIN user_projects up ON up.project_id = p.id
-         JOIN employees e ON up.user_id = e.user_id
-         LEFT JOIN timesheets t ON t.employee_id = e.id AND t.project_id = p.id${dateFilter ? ' AND t.period_start >= ? AND t.period_end <= ?' : ''}
-         WHERE p.status = 'Active' AND (t.id IS NULL OR t.status = 'draft')`,
-        dateFilter ? dfParams : []
+         WHERE p.status = 'Active'`
       )) as RowDataPacket[];
 
-      // Project statistics across all active projects
+      // Total active project managers
+      const projectManagerRows = (await database.query(
+        `SELECT COUNT(*) as total_project_managers
+         FROM users u
+         WHERE u.role = 'project_manager' AND u.is_active = 1`
+      )) as RowDataPacket[];
+
+      // Timesheet counts with optional date overlap filtering
+      const timesheetCountsRows = (await database.query(
+        `SELECT
+          COUNT(CASE WHEN status IN ('pending', 'approved') THEN 1 END) as filled,
+          COUNT(CASE WHEN status = 'pending' THEN 1 END) as pending,
+          COUNT(CASE WHEN status = 'approved' THEN 1 END) as approved,
+          COUNT(CASE WHEN status = 'rejected' THEN 1 END) as rejected,
+          COUNT(CASE WHEN status = 'draft' THEN 1 END) as draft,
+          COALESCE(SUM(CASE WHEN status IN ('pending', 'approved') THEN total_hours ELSE 0 END), 0) as total_hours
+        FROM timesheets t
+        WHERE 1=1${dateFilter}`,
+        dfParams
+      )) as RowDataPacket[];
+
+      // Project stats: for each active project, count assigned employees and filled timesheets
       const projectStatsRows = (await database.query(
-        `SELECT 
+        `SELECT
           p.id as projectId,
           p.name as projectName,
-          COUNT(DISTINCT up.user_id) as totalAssigned,
-          COUNT(DISTINCT CASE WHEN t.status IN ('pending', 'approved') THEN t.employee_id END) as filled,
-          COUNT(DISTINCT up.user_id) - COUNT(DISTINCT CASE WHEN t.status IN ('pending', 'approved') THEN t.employee_id END) as notFilled
+          p.code as projectCode,
+          COUNT(DISTINCT e.id) as totalAssigned,
+          COUNT(DISTINCT CASE WHEN t.status IN ('pending', 'approved') THEN t.employee_id END) as filled
         FROM projects p
         LEFT JOIN user_projects up ON up.project_id = p.id
         LEFT JOIN employees e ON up.user_id = e.user_id
-        LEFT JOIN timesheets t ON t.employee_id = e.id AND t.project_id = p.id${dateFilter ? ' AND t.period_start >= ? AND t.period_end <= ?' : ''}
+        LEFT JOIN timesheets t ON t.employee_id = e.id AND t.project_id = p.id${hasDateFilter ? ' AND t.period_start <= ? AND t.period_end >= ?' : ''}
         WHERE p.status = 'Active'
-        GROUP BY p.id, p.name
+        GROUP BY p.id, p.name, p.code
         ORDER BY p.name`,
-        dateFilter ? dfParams : []
+        hasDateFilter ? dfParams : []
       )) as RowDataPacket[];
 
+      const filledTimesheets = Number(timesheetCountsRows[0]?.filled) || 0;
+      const pendingApproval = Number(timesheetCountsRows[0]?.pending) || 0;
+      const approvedTimesheets = Number(timesheetCountsRows[0]?.approved) || 0;
+      const rejectedTimesheets = Number(timesheetCountsRows[0]?.rejected) || 0;
+      const draftTimesheets = Number(timesheetCountsRows[0]?.draft) || 0;
+      const totalHoursLogged = Number(timesheetCountsRows[0]?.total_hours) || 0;
+
       const dashboardData = {
-        totalEmployees: employeeRows[0]?.total_employees || 0,
-        filledTimesheets: filledRows[0]?.filled_timesheets || 0,
-        pendingApproval: pendingRows[0]?.pending_approval || 0,
-        approvedTimesheets: approvedRows[0]?.approved_timesheets || 0,
-        rejectedTimesheets: rejectedRows[0]?.rejected_timesheets || 0,
-        notSubmitted: notSubmittedRows[0]?.count || 0,
-        projectStats: projectStatsRows
+        totalEmployees: Number(employeeRows[0]?.total_employees) || 0,
+        totalProjects: Number(projectRows[0]?.total_projects) || 0,
+        totalProjectManagers: Number(projectManagerRows[0]?.total_project_managers) || 0,
+        filledTimesheets,
+        pendingApproval,
+        approvedTimesheets,
+        rejectedTimesheets,
+        draftTimesheets,
+        notSubmitted: 0, // Deprecated - keeping for backward compatibility
+        totalHoursLogged,
+        projectStats: projectStatsRows.map((row: any) => {
+          const totalAssigned = Number(row.totalAssigned) || 0;
+          const filled = Number(row.filled) || 0;
+          // Treat "not filled" as employees without a submitted timesheet for the period, not draft count
+          const notFilled = Math.max(0, totalAssigned - filled);
+          return {
+            projectId: row.projectId,
+            projectName: row.projectName,
+            projectCode: row.projectCode,
+            totalAssigned,
+            filled,
+            notFilled,
+          };
+        })
       };
+      // Also surface aggregate "not submitted" for legacy consumers
+      dashboardData.notSubmitted = dashboardData.projectStats.reduce((sum: number, p: any) => sum + (p.notFilled || 0), 0);
 
       return { success: true, data: dashboardData };
     } catch (error) {

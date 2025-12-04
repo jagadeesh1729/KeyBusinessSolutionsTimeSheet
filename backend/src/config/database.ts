@@ -1,22 +1,16 @@
 import mysql, { RowDataPacket, OkPacket } from 'mysql2/promise';
-import dotenv from 'dotenv';
 import Logger from '../utils/logger';
+import env from './env';
 
-dotenv.config();
-const toInt = (v: string | undefined, fallback: number) => {
-  const n = parseInt(String(v ?? ''));
-  return Number.isFinite(n) ? n : fallback;
-};
-
-const DB_CONNECT_MAX_RETRIES = toInt(process.env.DB_CONNECT_MAX_RETRIES, 30);
-const DB_CONNECT_RETRY_DELAY_MS = toInt(process.env.DB_CONNECT_RETRY_DELAY_MS, 2000);
+const DB_CONNECT_MAX_RETRIES = env.db.maxRetries;
+const DB_CONNECT_RETRY_DELAY_MS = env.db.retryDelayMs;
 
 const dbConfig = {
-  host: process.env.DB_HOST,
-  user: process.env.DB_USER,
-  password: process.env.DB_PASSWORD,
-  database: process.env.DB_NAME,
-  port: toInt(process.env.DB_PORT, 3306),
+  host: env.db.host,
+  user: env.db.user,
+  password: env.db.password,
+  database: env.db.database,
+  port: env.db.port,
   connectTimeout: 10000,
   enableKeepAlive: true,
   waitForConnections: true,
