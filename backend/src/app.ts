@@ -34,12 +34,14 @@ class App {
 
   private initializeMiddleware(): void {
     const allowedOrigins = env.corsOrigins.length ? env.corsOrigins : ['http://localhost:5173'];
+    const allowAllOrigins = allowedOrigins.includes('*');
     this.app.set('trust proxy', env.trustProxy ? 1 : undefined);
     this.app.use(securityHeaders);
     this.app.use(
       cors({
         origin(origin, callback) {
           if (!origin) return callback(null, true);
+          if (allowAllOrigins) return callback(null, true);
           if (allowedOrigins.includes(origin)) return callback(null, true);
           return callback(new Error('Not allowed by CORS'), false);
         },
