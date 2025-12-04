@@ -33,7 +33,7 @@ coverage
 
 # TypeScript
 *.tsbuildinfo
-
+.env
 # Package managers
 .pnp.*
 .yarn/*

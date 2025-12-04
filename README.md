@@ -57,6 +57,85 @@ docker compose --env-file .env up --build
 - Frontend available on `http://localhost:8080`
 - MySQL exposed on `3306`
 
+## Nginx Reverse Proxy
+
+The application includes a dedicated Nginx reverse proxy for production deployments.
+
+### Architecture
+
+```
+                    ┌─────────────────┐
+                    │     Client      │
+                    └────────┬────────┘
+                             │
+                             ▼
+                    ┌─────────────────┐
+                    │  Nginx Proxy    │
+                    │   (Port 80)     │
+                    └────────┬────────┘
+                             │
+              ┌──────────────┼──────────────┐
+              │              │              │
+              ▼              ▼              ▼
+       ┌────────────┐ ┌────────────┐ ┌────────────┐
+       │  Frontend  │ │  Backend   │ │   MySQL    │
+       │  (Nginx)   │ │  (Node.js) │ │  Database  │
+       └────────────┘ └────────────┘ └────────────┘
+```
+
+### Deployment Options
+
+#### Option 1: Full Stack with Nginx (Recommended for Production)
+```bash
+docker-compose -f docker-compose.prod.yaml up -d --build
+```
+Access: `http://localhost`
+
+#### Option 2: Full Stack Development (Local MySQL)
+```bash
+docker-compose -f docker-compose.full.yaml up -d --build
+```
+Access: `http://localhost`
+
+#### Option 3: MySQL Only (Local Development)
+```bash
+docker-compose -f docker-compose.dev.yaml up -d
+cd backend && npm run dev
+cd frontend && npm run dev
+```
+Access: `http://localhost:5173` (frontend), `http://localhost:3000` (backend)
+
+### Nginx Features
+
+- **Reverse Proxy**: Routes `/api/*` to backend, everything else to frontend
+- **Rate Limiting**: API rate limiting (10 req/s), Login rate limiting (1 req/s)
+- **Security Headers**: X-Frame-Options, X-Content-Type-Options, XSS Protection
+- **Gzip Compression**: Automatic compression for text-based responses
+- **Health Checks**: Built-in health endpoint at `/health`
+- **Google OAuth Support**: Routes `/google` and `/auth/google/*` to backend
+
+### SSL/HTTPS (Production)
+
+For SSL support, use the `nginx-ssl.conf` configuration:
+
+1. Obtain SSL certificates (e.g., from Let's Encrypt)
+2. Mount certificates into the Nginx container:
+   ```yaml
+   volumes:
+     - ./ssl/fullchain.pem:/etc/nginx/ssl/fullchain.pem:ro
+     - ./ssl/privkey.pem:/etc/nginx/ssl/privkey.pem:ro
+   ```
+3. Update the Nginx Dockerfile to use `nginx-ssl.conf`:
+   ```dockerfile
+   COPY nginx-ssl.conf /etc/nginx/nginx.conf
+   ```
+4. Expose port 443:
+   ```yaml
+   ports:
+     - '80:80'
+     - '443:443'
+   ```
+
 ## Docker Images
 
 - **Frontend**: Multi-stage build producing a static bundle served by Nginx.

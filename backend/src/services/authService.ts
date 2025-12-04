@@ -45,7 +45,7 @@ export class AuthService {
         return null;
       }
       return Client.init({
-        authProvider: (done: (err: any, token?: string | null) => void) => done(null, token.token),
+        authProvider: (done: (err: Error | null, token: string | null) => void) => done(null, token.token),
       });
     } catch (error: any) {
       console.error('Error creating Graph client:', error?.message || error);

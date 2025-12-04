@@ -17,16 +17,26 @@ const mailer = nodemailer.createTransport({
   secure: false,
   auth: { user: env.email.user, pass: env.email.pass },
 });
-const tenantId = process.env.MS_TENANT_ID!;
-const clientId = process.env.MS_CLIENT_ID!;
-const clientSecret = process.env.MS_CLIENT_SECRET!;
+const tenantId = process.env.MS_TENANT_ID || '';
+const clientId = process.env.MS_CLIENT_ID || '';
+const clientSecret = process.env.MS_CLIENT_SECRET || '';
 const fromEmail = 'Timesheet@keybusinessglobal.com'; // keep your existing from email here
 
-const credential = new ClientSecretCredential(tenantId, clientId, clientSecret);
+let credential: InstanceType<typeof ClientSecretCredential> | null = null;
+
+function getCredential(): InstanceType<typeof ClientSecretCredential> {
+  if (!credential) {
+    if (!tenantId || !clientId || !clientSecret) {
+      throw new Error('Azure credentials (MS_TENANT_ID, MS_CLIENT_ID, MS_CLIENT_SECRET) are not configured');
+    }
+    credential = new ClientSecretCredential(tenantId, clientId, clientSecret);
+  }
+  return credential;
+}
 
 async function getAccessToken() {
   const scope = 'https://graph.microsoft.com/.default';
-  const token = await credential.getToken(scope);
+  const token = await getCredential().getToken(scope);
   if (!token) throw new Error('Failed to get access token');
   return token.token;
 }
@@ -34,7 +44,7 @@ async function getAccessToken() {
 async function getGraphClient() {
   const token = await getAccessToken();
   return Client.init({
-    authProvider: (done: (err: any, token?: string | null) => void) => done(null, token),
+    authProvider: (done: (err: Error | null, token: string | null) => void) => done(null, token),
   });
 }
 

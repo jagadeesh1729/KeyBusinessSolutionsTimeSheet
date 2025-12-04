@@ -31,7 +31,7 @@ export class TimesheetService {
     const token = await credential.getToken('https://graph.microsoft.com/.default');
     if (!token) return null;
     return Client.init({
-      authProvider: (done: (err: any, token?: string | null) => void) => done(null, token.token),
+      authProvider: (done: (err: Error | null, token: string | null) => void) => done(null, token.token),
     });
   }
 
