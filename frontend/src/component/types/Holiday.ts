@@ -34,8 +34,12 @@ export interface Timesheet {
   project?: {
     id: number;
     name: string;
+    code?: string;
+    clientAddress?: string;
     autoApprove: boolean;
     periodType: 'weekly' | 'bi-monthly' | 'monthly';
+    signature_required?: boolean;
+    signatureRequired?: boolean;
   };
   employee?: {
     id: number;
@@ -43,6 +47,7 @@ export interface Timesheet {
     email: string;
   };
   employeeName?: string;
+  employeeEmail?: string;
 }
 
 export interface CreateTimesheetRequest {
@@ -97,6 +102,7 @@ export interface Project {
 export interface ProjectStat {
   projectId: number;
   projectName: string;
+  projectCode?: string;
   totalAssigned: number;
   filled: number;
   notFilled: number;
@@ -104,11 +110,15 @@ export interface ProjectStat {
 
 export interface DashboardStats {
   totalEmployees: number;
+  totalProjects: number;
+  totalProjectManagers: number;
   filledTimesheets: number;
   pendingApproval: number;
   approvedTimesheets: number;
   rejectedTimesheets: number;
+  draftTimesheets: number;
   notSubmitted: number;
+  totalHoursLogged: number;
   projectStats: ProjectStat[];
 }
 
@@ -141,5 +151,3 @@ export interface TimesheetEntryOptionA {
   tasks: TaskEntry[];
   hours: number;
 }
-
-

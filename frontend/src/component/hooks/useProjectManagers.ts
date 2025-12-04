@@ -10,6 +10,7 @@ type ManagerFormData = Omit<ProductManager, 'id' | 'employees' | 'project'> & {
 
 export const useProjectManagers = () => {
   const [managers, setManagers] = useState<ProductManager[]>([]);
+  const [inactiveManagers, setInactiveManagers] = useState<ProductManager[]>([]);
   const [availableProjects, setAvailableProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -23,8 +24,9 @@ export const useProjectManagers = () => {
     try {
       setLoading(true);
       setError(null);
-      const [pmsResponse, projectsResponse] = await Promise.all([
+      const [pmsResponse, inactivePmsResponse, projectsResponse] = await Promise.all([
         apiClient.get('/users/pms'),
+        apiClient.get('/users/pms/inactive'),
         apiClient.get('/projects/'), // This gets all available projects
       ]);
       
@@ -41,11 +43,44 @@ export const useProjectManagers = () => {
             last_name: user.last_name ?? (user.name ? user.name.split(' ').slice(1).join(' ') : ''),
             email: user.email,
             phone: user.phone,
+            is_active: user.is_active,
             project: assignedProjects,
             employees: [],
           };
         }));
         setManagers(managersWithProjects);
+      }
+
+      // Process inactive managers
+      if (inactivePmsResponse.data && Array.isArray(inactivePmsResponse.data.users)) {
+        const inactiveManagersWithProjects = await Promise.all(inactivePmsResponse.data.users.map(async (user: any) => {
+          try {
+            const userProjectsResponse = await apiClient.get(`/users/${user.id}/projects`);
+            const assignedProjects = userProjectsResponse.data?.projects || [];
+            return {
+              id: user.id,
+              first_name: user.first_name ?? (user.name ? user.name.split(' ')[0] : ''),
+              last_name: user.last_name ?? (user.name ? user.name.split(' ').slice(1).join(' ') : ''),
+              email: user.email,
+              phone: user.phone,
+              is_active: user.is_active,
+              project: assignedProjects,
+              employees: [],
+            };
+          } catch {
+            return {
+              id: user.id,
+              first_name: user.first_name ?? (user.name ? user.name.split(' ')[0] : ''),
+              last_name: user.last_name ?? (user.name ? user.name.split(' ').slice(1).join(' ') : ''),
+              email: user.email,
+              phone: user.phone,
+              is_active: user.is_active,
+              project: [],
+              employees: [],
+            };
+          }
+        }));
+        setInactiveManagers(inactiveManagersWithProjects);
       }
     } catch (err: any) {
       setError(err.response?.data?.message || 'Failed to fetch data.');
@@ -131,8 +166,31 @@ export const useProjectManagers = () => {
     }
   };
 
+  const handleDeactivate = async (id: number) => {
+    if (window.confirm('Are you sure you want to deactivate this project manager?')) {
+      try {
+        await apiClient.delete(`/users/${id}`);
+        fetchManagersAndProjects(); // Refresh the list
+      } catch (err: any) {
+        setError(err.response?.data?.message || 'Failed to deactivate project manager.');
+      }
+    }
+  };
+
+  const handleReactivate = async (id: number) => {
+    if (window.confirm('Are you sure you want to reactivate this project manager?')) {
+      try {
+        await apiClient.put(`/users/${id}/reactivate`);
+        fetchManagersAndProjects(); // Refresh the list
+      } catch (err: any) {
+        setError(err.response?.data?.message || 'Failed to reactivate project manager.');
+      }
+    }
+  };
+
   return {
     managers,
+    inactiveManagers,
     availableProjects,
     loading,
     error,
@@ -145,5 +203,7 @@ export const useProjectManagers = () => {
     handleFormChange,
     handleProjectSelection,
     handleSave,
+    handleDeactivate,
+    handleReactivate,
   };
 };

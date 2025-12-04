@@ -31,6 +31,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         name: parsed.name ?? `${parsed.first_name ?? ''} ${parsed.last_name ?? ''}`.trim(),
         role: parsed.role as User['role'],
         no_of_hours: typeof parsed.no_of_hours === 'number' ? parsed.no_of_hours : 40,
+        first_name: parsed.first_name,
+        last_name: parsed.last_name,
       };
       return normalized.userId ? normalized : null;
     } catch {

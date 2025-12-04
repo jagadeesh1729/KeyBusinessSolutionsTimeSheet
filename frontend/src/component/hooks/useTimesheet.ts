@@ -1,5 +1,5 @@
 // Updated hook to handle timesheet editing and rejection details
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { timesheetAPI, projectAPI } from '../../api/timesheetapi';
 import type { Timesheet, DailyEntry, CreateTimesheetRequest, UpdateTimesheetRequest } from '../types/Holiday';
 import type  Project  from '../types/project';
@@ -25,7 +25,15 @@ export const useCurrentTimesheet = (projectId?: number) => {
           timesheetData.totalHours = ts.total_hours;
           timesheetData.rejectionReason = ts.rejection_reason;
           timesheetData.dailyEntries = ts.daily_entries?.entries || [];
-          timesheetData.project = { name: ts.project_name, autoApprove: Boolean(ts.auto_approve), periodType: ts.period_type, id: ts.project_id };
+          timesheetData.project = { 
+            name: ts.project_name, 
+            code: ts.project_code,
+            clientAddress: ts.client_address,
+            autoApprove: Boolean(ts.auto_approve), 
+            periodType: ts.period_type, 
+            signature_required: ts.signature_required,
+            id: ts.project_id 
+          };
         }
         setData(timesheetData || null);
       } else {
@@ -75,8 +83,11 @@ export const useTimesheetById = (timesheetId?: number) => {
           timesheetData.dailyEntries = ts.daily_entries?.entries || [];
           timesheetData.project = { 
             name: ts.project_name, 
+            code: ts.project_code,
+            clientAddress: ts.client_address,
             autoApprove: Boolean(ts.auto_approve), 
             periodType: ts.period_type, 
+            signature_required: ts.signature_required,
             id: ts.project_id 
           };
         }
@@ -128,12 +139,16 @@ export const useTimesheetHistory = () => {
           periodEnd: ts.period_end,
           totalHours: ts.total_hours,
           employeeName: ts.employee_name,
+          employeeEmail: ts.employee_email ?? ts.employeeEmail ?? ts.employee?.email,
           rejectionReason: ts.rejection_reason, // Add this mapping
           project: {
             id: ts.project_id,
             name: ts.project_name,
+            code: ts.project_code,
+            clientAddress: ts.client_address,
             autoApprove: Boolean(ts.auto_approve),
             periodType: ts.period_type,
+            signature_required: ts.signature_required,
           },
           // Ensure dailyEntries is an array
           dailyEntries: ts.daily_entries?.entries || [],
@@ -177,8 +192,11 @@ export const useDraftTimesheets = () => {
           project: {
             id: ts.project_id,
             name: ts.project_name,
+            code: ts.project_code,
+            clientAddress: ts.client_address,
             autoApprove: ts.auto_approve,
             periodType: ts.period_type,
+            signature_required: ts.signature_required,
           },
           dailyEntries: ts.daily_entries?.entries || [],
         }));
@@ -208,7 +226,6 @@ export const useAssignedProjects = (url?: string) => {
 
   const fetchProjects = async () => {
     try {
-      console.log(`Fetching projects from: ${url || 'assigned'}`);
       setLoading(true);
       setError(null);
 
@@ -222,21 +239,20 @@ export const useAssignedProjects = (url?: string) => {
         response = await projectAPI.getAssignedProjects();
       }
 
-      console.log('Projects API response:', response);
       if (response.data.success) {
-        console.log('Projects found:', response.data.projects);
+        console.log('useAssignedProjects API Response Projects:', response.data.projects);
         const normalized = (response.data.projects || []).map((p: any) => ({
           ...p,
           auto_approve: Boolean(p.auto_approve ?? p.autoApprove),
           period_type: p.period_type ?? p.periodType,
+          signature_required: p.signature_required ?? p.signatureRequired ?? true,
         }));
+        console.log('useAssignedProjects Normalized Projects:', normalized);
         setData(normalized);
       } else {
-        console.log('API returned error:', response.data.message);
         setError(response.data.message || 'Failed to fetch projects');
       }
     } catch (err: any) {
-      console.log('API call failed:', err);
       setError(err.response?.data?.message || 'Failed to fetch projects');
     } finally {
       setLoading(false);
@@ -332,31 +348,43 @@ export const useDashboardStats = (range: string = 'current', startDate?: string,
   const [data, setData] = useState<import('../types/Holiday').DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const requestTokenRef = useRef(0);
 
   const fetchStats = async (timeRange: string) => {
     try {
+      const token = Date.now();
+      requestTokenRef.current = token;
       setLoading(true);
       setError(null);
+
       const response = await timesheetAPI.getDashboardStats({ range: timeRange, startDate, endDate });
       if (response.data.success) {
         const raw = response.data.data || {};
         // Normalize API response (snake_case -> camelCase) and ensure defaults
         const normalized: import('../types/Holiday').DashboardStats = {
           totalEmployees: raw.total_employees ?? raw.totalEmployees ?? 0,
+          totalProjects: raw.total_projects ?? raw.totalProjects ?? 0,
+          totalProjectManagers: raw.total_project_managers ?? raw.totalProjectManagers ?? 0,
           filledTimesheets: raw.filled_timesheets ?? raw.filledTimesheets ?? 0,
           pendingApproval: raw.pending_approval ?? raw.pendingApproval ?? 0,
           approvedTimesheets: raw.approved_timesheets ?? raw.approvedTimesheets ?? 0,
           rejectedTimesheets: raw.rejected_timesheets ?? raw.rejectedTimesheets ?? 0,
+          draftTimesheets: raw.draft_timesheets ?? raw.draftTimesheets ?? 0,
           notSubmitted: raw.not_submitted ?? raw.notSubmitted ?? 0,
+          totalHoursLogged: raw.total_hours_logged ?? raw.totalHoursLogged ?? 0,
           projectStats: (raw.project_stats ?? raw.projectStats ?? []).map((p: any) => ({
             projectId: p.project_id ?? p.projectId ?? 0,
             projectName: p.project_name ?? p.projectName ?? 'Unknown',
+            projectCode: p.project_code ?? p.projectCode ?? '',
             totalAssigned: p.total_assigned ?? p.totalAssigned ?? 0,
             filled: p.filled ?? 0,
             notFilled: p.not_filled ?? p.notFilled ?? Math.max(0, (p.total_assigned ?? p.totalAssigned ?? 0) - (p.filled ?? 0)),
           })),
         };
-        setData(normalized);
+        // Drop stale responses that returned after a newer request was issued
+        if (requestTokenRef.current === token) {
+          setData(normalized);
+        }
       } else {
         setError(response.data.message || 'Failed to fetch dashboard stats');
       }

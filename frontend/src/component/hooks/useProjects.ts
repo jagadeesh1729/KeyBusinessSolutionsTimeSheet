@@ -9,6 +9,7 @@ interface ProjectFormData {
   status: 'Active' | 'Inactive';
   auto_approve: boolean;
   period_type: 'weekly' | 'bi-monthly' | 'monthly';
+  signature_required: boolean;
   start_date?: string;
   end_date?: string;
   // Optional new fields
@@ -19,6 +20,7 @@ interface ProjectFormData {
 
 export const useProjects = () => {
   const [projects, setProjects] = useState<Project[]>([]);
+  const [inactiveProjects, setInactiveProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -30,6 +32,7 @@ export const useProjects = () => {
     status: 'Active',
     auto_approve: true,
     period_type: 'weekly',
+    signature_required: true,
     start_date: '',
     end_date: '',
     client_address: '',
@@ -39,10 +42,16 @@ export const useProjects = () => {
   const fetchProjects = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await apiClient.get('/projects/');
+      const [activeResponse, inactiveResponse] = await Promise.all([
+        apiClient.get('/projects/'),
+        apiClient.get('/projects/inactive')
+      ]);
       // Ensure the response structure is correctly handled
-      if (response.data && Array.isArray(response.data.projects)) {
-        setProjects(response.data.projects);
+      if (activeResponse.data && Array.isArray(activeResponse.data.projects)) {
+        setProjects(activeResponse.data.projects);
+      }
+      if (inactiveResponse.data && Array.isArray(inactiveResponse.data.projects)) {
+        setInactiveProjects(inactiveResponse.data.projects);
       }
       setError(null); // Clear previous errors on success
     } catch (err: any) {
@@ -63,6 +72,7 @@ export const useProjects = () => {
         ...project,
         start_date: project.start_date?.split('T')[0] || '', // Format for date input
         end_date: project.end_date?.split('T')[0] || '',
+        signature_required: (project as any).signature_required ?? true,
       });
     } else {
       // Reset to default for creating a new project
@@ -71,6 +81,7 @@ export const useProjects = () => {
         status: 'Active',
         auto_approve: true,
         period_type: 'weekly',
+        signature_required: true,
         start_date: '',
         end_date: '',
         client_address: '',
@@ -89,6 +100,7 @@ export const useProjects = () => {
       status: project.status,
       auto_approve: project.auto_approve,
       period_type: project.period_type,
+      signature_required: (project as any).signature_required ?? true,
       start_date: project.start_date ? project.start_date.split('T')[0] : '',
       end_date: project.end_date ? project.end_date.split('T')[0] : '',
       client_address: (project as any).client_address || '',
@@ -143,8 +155,20 @@ export const useProjects = () => {
     }
   };
 
+  const handleReactivate = async (id: number) => {
+    if (window.confirm('Are you sure you want to reactivate this project?')) {
+      try {
+        await apiClient.put(`/projects/${id}`, { status: 'Active' });
+        fetchProjects(); // Refresh the list
+      } catch (err) {
+        setError('Failed to reactivate project. Please try again.');
+      }
+    }
+  };
+
   return {
     projects,
+    inactiveProjects,
     loading,
     error,
     isModalOpen,
@@ -156,5 +180,6 @@ export const useProjects = () => {
     handleFormChange,
     handleSave,
     handleDeactivate,
+    handleReactivate,
   };
 };

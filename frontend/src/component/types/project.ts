@@ -10,6 +10,7 @@ export default interface Project {
   code?: string;
   client_address?: string;
   project_description?: string;
+  signature_required?: boolean;
   created_at?: string;
   updated_at?: string;
 }

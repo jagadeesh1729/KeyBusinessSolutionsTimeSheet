@@ -6,6 +6,7 @@ import type ProductManager from '../types/ProductManager';
 
 export const useEmployees = () => {
   const [employees, setEmployees] = useState<Employee[]>([]);
+  const [inactiveEmployees, setInactiveEmployees] = useState<Employee[]>([]);
   const [availableProjects, setAvailableProjects] = useState<Project[]>([]);
   const [availableManagers, setAvailableManagers] = useState<ProductManager[]>([]);
   const [loading, setLoading] = useState(true);
@@ -21,8 +22,9 @@ export const useEmployees = () => {
       setLoading(true);
       setError(null);
 
-      const [employeesRes, projectsRes, managersRes] = await Promise.all([
+      const [employeesRes, inactiveEmployeesRes, projectsRes, managersRes] = await Promise.all([
         apiClient.get('/auth/users'),
+        apiClient.get('/users/employees/inactive'),
         apiClient.get('/projects/'),
         apiClient.get('/users/pms'),
       ]);
@@ -42,6 +44,12 @@ export const useEmployees = () => {
         college_Dso_name: user.college_Dso_name,
         college_Dso_email: user.college_Dso_email,
         college_Dso_phone: user.college_Dso_phone,
+        primary_emergency_contact_full_name: user.primary_emergency_contact_full_name,
+        primary_emergency_contact_relationship: user.primary_emergency_contact_relationship,
+        primary_emergency_contact_home_phone: user.primary_emergency_contact_home_phone,
+        secondary_emergency_contact_full_name: user.secondary_emergency_contact_full_name,
+        secondary_emergency_contact_relationship: user.secondary_emergency_contact_relationship,
+        secondary_emergency_contact_home_phone: user.secondary_emergency_contact_home_phone,
         job_start_date: user.employement_start_date,
         start_date: user.start_date,
         end_date: user.end_date,
@@ -54,6 +62,43 @@ export const useEmployees = () => {
         project_manager: user.project_manager,
         project_manager_id: user.project_manager?.id || null,
         role: user.role,
+        is_active: user.is_active,
+      })));
+
+      // Process inactive employees
+      const inactiveUsers = inactiveEmployeesRes.data?.users || [];
+      setInactiveEmployees(inactiveUsers.map((user: any) => ({
+        id: user.id,
+        first_name: user.first_name ?? (user.name ? user.name.split(' ')[0] : ''),
+        last_name: user.last_name ?? (user.name ? user.name.split(' ').slice(1).join(' ') : ''),
+        email: user.email,
+        phone: user.phone,
+        job_title: user.job_title || 'N/A',
+        college_name: user.college_name,
+        college_address: user.college_address,
+        degree: user.degree,
+        college_Dso_name: user.college_Dso_name,
+        college_Dso_email: user.college_Dso_email,
+        college_Dso_phone: user.college_Dso_phone,
+        primary_emergency_contact_full_name: user.primary_emergency_contact_full_name,
+        primary_emergency_contact_relationship: user.primary_emergency_contact_relationship,
+        primary_emergency_contact_home_phone: user.primary_emergency_contact_home_phone,
+        secondary_emergency_contact_full_name: user.secondary_emergency_contact_full_name,
+        secondary_emergency_contact_relationship: user.secondary_emergency_contact_relationship,
+        secondary_emergency_contact_home_phone: user.secondary_emergency_contact_home_phone,
+        job_start_date: user.employement_start_date,
+        start_date: user.start_date,
+        end_date: user.end_date,
+        visa_status: user.visa_status,
+        date_of_birth: user.date_of_birth,
+        compensation: user.compensation,
+        job_duties: user.job_duties,
+        no_of_hours: user.no_of_hours,
+        project: user.project || [],
+        project_manager: user.project_manager,
+        project_manager_id: user.project_manager?.id || null,
+        role: user.role,
+        is_active: user.is_active,
       })));
 
       setAvailableProjects(projectsRes.data.projects || []);
@@ -196,8 +241,20 @@ export const useEmployees = () => {
     }
   };
 
+  const handleReactivate = async (id: number) => {
+    if (window.confirm('Are you sure you want to reactivate this employee?')) {
+      try {
+        await apiClient.put(`/users/${id}/reactivate`);
+        fetchData(); // Refresh list
+      } catch (err: any) {
+        setError(err.response?.data?.message || 'Failed to reactivate employee.');
+      }
+    }
+  };
+
   return {
     employees,
+    inactiveEmployees,
     availableProjects,
     availableManagers,
     pmProjectsOptions,
@@ -212,5 +269,6 @@ export const useEmployees = () => {
     handleProjectSingleSelect,
     handleSave,
     handleDelete,
+    handleReactivate,
   };
 };

@@ -36,6 +36,7 @@ const TimesheetEntry: React.FC = () => {
       return {
         id: p.id,
         name: p.name,
+        code: p.code,
         status: 'Active',
         auto_approve: Boolean(p.auto_approve ?? p.autoApprove),
         period_type: p.period_type ?? p.periodType ?? 'weekly',
