@@ -68,7 +68,7 @@ services:
       dockerfile: Dockerfile
       args:
         VITE_API_BASE_URL: /api
-        VITE_BACKEND_URL: ''
+        VITE_BACKEND_URL: http://backend:3000
         VITE_LOGIN_BACKGROUND_URL: https://source.unsplash.com/random?wallpapers
     restart: unless-stopped
     deploy:
