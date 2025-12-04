@@ -1,9 +1,7 @@
 import axios from 'axios';
 
 const apiClient = axios.create({
-  // The base URL is prefixed to all requests
-  // Thanks to the proxy, this will be forwarded to http://localhost:3000/api
-  baseURL: '/api',
+  baseURL: import.meta.env.VITE_API_BASE_URL || '/api',
   headers: {
     'Content-Type': 'application/json',
   },

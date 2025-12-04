@@ -1,16 +1,17 @@
 FROM node:20-alpine AS build
 WORKDIR /app
-COPY backend/package*.json ./
-RUN npm ci
-COPY backend/tsconfig.json ./
-COPY backend/src ./src
+COPY package*.json ./
+RUN npm ci --ignore-scripts
+COPY tsconfig.json ./
+COPY src ./src
 RUN npm run build
 
 FROM node:20-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
-COPY backend/package*.json ./
-RUN npm ci --omit=dev
+COPY package*.json ./
+RUN npm ci --omit=dev --ignore-scripts
 COPY --from=build /app/dist ./dist
+USER node
 EXPOSE 3000
 CMD ["node", "dist/server.js"]

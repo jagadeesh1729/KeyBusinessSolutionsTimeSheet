@@ -1,5 +1,4 @@
 import { Router, Request, Response } from 'express';
-import dotenv from 'dotenv';
 import { google } from 'googleapis';
 import nodemailer from 'nodemailer';
 import fs from 'fs';
@@ -8,16 +7,15 @@ import { authenticate } from '../middleware/authMiddleware';
 import { requirePMOrAdmin } from '../middleware/roleMiddleware';
 import { TimesheetService } from '../services/timesheetService';
 import { GoogleTokenService } from '../services/googleTokenService';
-
-dotenv.config();
+import env from '../config/env';
 
 const router = Router();
 
 const loadGoogleClient = async () => {
   const oauth2Client = new google.auth.OAuth2(
-    process.env.CLIENT_ID,
-    process.env.CLIENT_SECRET,
-    process.env.REDIRECT_URI
+    env.google.clientId,
+    env.google.clientSecret,
+    env.google.redirectUri
   );
   // Load tokens from DB (admin-level)
   try {
@@ -42,12 +40,12 @@ const loadGoogleClient = async () => {
 
 // Use Outlook (Office 365) SMTP for email notifications
 const mailer = nodemailer.createTransport({
-  host: 'smtp.office365.com',
-  port: 587,
+  host: env.email.host || 'smtp.office365.com',
+  port: env.email.port || 587,
   secure: false,
   auth: {
-    user: process.env.IONOS_USER,
-    pass: process.env.IONOS_PASS,
+    user: env.email.user,
+    pass: env.email.pass,
   },
 });
 
@@ -85,15 +83,15 @@ router.post('/create', authenticate, requirePMOrAdmin, async (req: Request, res:
         },
         conferenceDataVersion: 1,
       });
-    } catch (e: any) {
-      // If auth missing/invalid, return an authorize URL so frontend can redirect
-      const authUrl = (new google.auth.OAuth2(
-        process.env.CLIENT_ID,
-        process.env.CLIENT_SECRET,
-        process.env.REDIRECT_URI
-      )).generateAuthUrl({ access_type: 'offline', prompt: 'consent', include_granted_scopes: true as any, scope: ['https://www.googleapis.com/auth/calendar.events'] });
-      return res.status(400).json({ success: false, authorize: true, authUrl, message: 'Google authorization required. Visit /google to authorize.' });
-    }
+      } catch (e: any) {
+        // If auth missing/invalid, return an authorize URL so frontend can redirect
+        const authUrl = (new google.auth.OAuth2(
+          env.google.clientId,
+          env.google.clientSecret,
+          env.google.redirectUri
+        )).generateAuthUrl({ access_type: 'offline', prompt: 'consent', include_granted_scopes: true as any, scope: ['https://www.googleapis.com/auth/calendar.events'] });
+        return res.status(400).json({ success: false, authorize: true, authUrl, message: 'Google authorization required. Visit /google to authorize.' });
+      }
 
     const event = eventResponse.data;
     const meetLink = (event.conferenceData && event.conferenceData.entryPoints && event.conferenceData.entryPoints[0]?.uri) || (event.hangoutLink as string) || '';
@@ -101,7 +99,7 @@ router.post('/create', authenticate, requirePMOrAdmin, async (req: Request, res:
     // Build recipients: attendees (optional) + PM team + PM + Admin
     const pmUser = (req as any).user || {};
     const pmEmail = pmUser?.email;
-    const adminEmail = process.env.ADMIN_EMAIL;
+    const adminEmail = env.email.admin;
     let teamEmails: string[] = [];
     try {
       const service = new TimesheetService();
@@ -121,9 +119,9 @@ router.post('/create', authenticate, requirePMOrAdmin, async (req: Request, res:
 
     // Send invitation email with ICS attachment (Outlook SMTP). Do not fail meeting creation if SMTP is blocked.
     let emailError: string | undefined;
-    if (process.env.IONOS_USER && process.env.IONOS_PASS && toList.length > 0) {
+    if (env.email.user && env.email.pass && toList.length > 0) {
       try {
-        const from = process.env.IONOS_FROM || process.env.IONOS_USER!;
+        const from = env.email.from || env.email.user!;
         const html = `
           <p>Hello,</p>
           <p>You are invited to: <b>${title}</b></p>

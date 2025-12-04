@@ -1,23 +1,25 @@
 import express from 'express';
 import cors from 'cors';
-import dotenv from 'dotenv';
 import authRoutes from './routes/authRoutes';
 import { errorHandler, requestLogger } from './middleware/loggerMiddleware';
 import projectRoutes from './routes/projectRoutes';
 import userRoutes from './routes/userRoutes';
-import { time } from 'console';
 import timesheetRoutes from './routes/timesheetRoutes';
 import dashboardRoutes from './routes/dashboardRoutes';
 import offerLetterRoutes from './routes/offerLetterRoutes';
 import meetingRoutes from './routes/meetingRoutes';
 import emailRoutes from './routes/emailRoutes';
-import { google } from "googleapis";
+import { google } from 'googleapis';
 import { GoogleTokenService } from './services/googleTokenService';
-dotenv.config();
+import env from './config/env';
+import { generalRateLimiter } from './middleware/rateLimiters';
+import { securityHeaders } from './middleware/securityHeaders';
+import Logger from './utils/logger';
+
 const oauth2Client = new google.auth.OAuth2(
-  process.env.CLIENT_ID,
-  process.env.CLIENT_SECRET,
-   process.env.REDIRECT_URI
+  env.google.clientId,
+  env.google.clientSecret,
+  env.google.redirectUri,
 );
 class App {
   public app: express.Application;
@@ -30,10 +32,25 @@ class App {
   }
 
   private initializeMiddleware(): void {
-    this.app.use(cors());
-    this.app.use(express.json());
-    this.app.use(express.urlencoded({ extended: true }));
-    this.app.use(requestLogger);
+    const allowedOrigins = env.corsOrigins.length ? env.corsOrigins : ['http://localhost:5173'];
+    this.app.set('trust proxy', env.trustProxy ? 1 : undefined);
+    this.app.use(securityHeaders);
+    this.app.use(
+      cors({
+        origin(origin, callback) {
+          if (!origin) return callback(null, true);
+          if (allowedOrigins.includes(origin)) return callback(null, true);
+          return callback(new Error('Not allowed by CORS'), false);
+        },
+        credentials: true,
+      }),
+    );
+    this.app.use(express.json({ limit: '1mb' }));
+    this.app.use(express.urlencoded({ extended: true, limit: '1mb' }));
+    if (env.nodeEnv !== 'production') {
+      this.app.use(requestLogger);
+    }
+    this.app.use(generalRateLimiter);
   }
 
   private initializeRoutes(): void {
@@ -83,7 +100,7 @@ this.app.get("/auth/google/callback", async (req, res) => {
       expiry_date: (this.tokens as any).expiry_date,
     });
   } catch (e) {
-    console.error('Failed to persist Google tokens to DB', e);
+    Logger.error(`Failed to persist Google tokens to DB: ${e}`);
   }
   res.send("Super Admin authorized successfully. Tokens saved to DB!");
 });

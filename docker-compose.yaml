@@ -1,50 +1,87 @@
+version: '3.9'
+
 services:
   mysql:
     image: mysql:8.0
     container_name: mysql-keybusiness
-    restart: always
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: ${MYSQL_CPU_LIMIT:-"0.50"}
+          memory: ${MYSQL_MEMORY_LIMIT:-"1g"}
+    env_file:
+      - ./.env
     environment:
-      MYSQL_ROOT_PASSWORD: password
-      MYSQL_DATABASE: keybusiness
-      MYSQL_USER: appuser
-      MYSQL_PASSWORD: apppassword
-      TZ: America/Los_Angeles
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${DB_NAME}
+      MYSQL_USER: ${DB_USER}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+      TZ: ${TZ:-UTC}
     ports:
       - '3306:3306'
     volumes:
       - db_data:/var/lib/mysql
+    healthcheck:
+      test: ['CMD', 'mysqladmin', 'ping', '-h', 'localhost']
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   backend:
     build:
-      context: .
-      dockerfile: backend/Dockerfile
+      context: ./backend
+      dockerfile: Dockerfile
     container_name: kbs-backend
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: ${BACKEND_CPU_LIMIT:-"0.50"}
+          memory: ${BACKEND_MEMORY_LIMIT:-"512m"}
     env_file:
-      - ./backend/.env
+      - ./.env
     environment:
+      NODE_ENV: production
       DB_HOST: mysql
-      DB_PORT: 3306
-      PORT: 3000
+      DB_PORT: ${DB_PORT:-3306}
+      PORT: ${PORT:-3000}
     depends_on:
-      - mysql
+      mysql:
+        condition: service_healthy
     ports:
-      - '3000:3000'
+      - '${PORT:-3000}:3000'
+    healthcheck:
+      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://localhost:3000/health']
+      interval: 30s
+      timeout: 5s
+      retries: 5
 
   frontend:
     build:
-      context: .
-      dockerfile: frontend/Dockerfile
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-/api}
+        VITE_BACKEND_URL: ${VITE_BACKEND_URL:-http://backend:3000}
+        VITE_LOGIN_BACKGROUND_URL: ${VITE_LOGIN_BACKGROUND_URL:-https://source.unsplash.com/random?wallpapers}
     container_name: kbs-frontend
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: ${FRONTEND_CPU_LIMIT:-"0.25"}
+          memory: ${FRONTEND_MEMORY_LIMIT:-"256m"}
+    env_file:
+      - ./.env
+    environment:
+      VITE_API_BASE_URL: ${VITE_API_BASE_URL:-/api}
+      VITE_BACKEND_URL: ${VITE_BACKEND_URL:-http://localhost:3000}
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     ports:
       - '8080:80'
 
 volumes:
   db_data:
-
-## Helpful commands
-# docker exec -it container_name bash
-# mysql -u root -p 
