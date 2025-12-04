@@ -2,7 +2,8 @@ import { RequestHandler } from 'express'
 import env from '../config/env'
 
 const buildCsp = (allowedOrigins: string[]): string => {
-  const connect = allowedOrigins.length ? allowedOrigins.join(' ') : ''
+  const allowAll = allowedOrigins.includes('*')
+  const connect = allowAll ? '*' : (allowedOrigins.length ? allowedOrigins.join(' ') : '')
   const directives = [
     "default-src 'self'",
     "script-src 'self' https://cdn.jsdelivr.net",
