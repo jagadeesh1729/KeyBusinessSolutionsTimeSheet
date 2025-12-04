@@ -34,7 +34,7 @@ async function getAccessToken() {
 async function getGraphClient() {
   const token = await getAccessToken();
   return Client.init({
-    authProvider: (done) => done(null, token),
+    authProvider: (done: (err: any, token?: string | null) => void) => done(null, token),
   });
 }
 

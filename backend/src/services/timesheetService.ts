@@ -31,7 +31,7 @@ export class TimesheetService {
     const token = await credential.getToken('https://graph.microsoft.com/.default');
     if (!token) return null;
     return Client.init({
-      authProvider: (done) => done(null, token.token),
+      authProvider: (done: (err: any, token?: string | null) => void) => done(null, token.token),
     });
   }
 
@@ -1401,9 +1401,9 @@ export class TimesheetService {
     try {
       const { range, startDate, endDate } = params;
       const resolved = this.resolveRange(range, startDate, endDate);
-      
-      // For date filtering, we use overlapping logic: timesheet overlaps if period_start <= range_end AND period_end >= range_start
       const hasDateFilter = resolved.start && resolved.end;
+      const dateFilter = hasDateFilter ? ' AND t.period_start <= ? AND t.period_end >= ?' : '';
+      const dfParams = hasDateFilter ? [resolved.end!, resolved.start!] : [];
 
       // Total employees in the system (users who have employee records)
       const employeeRows = (await database.query(
@@ -1427,174 +1427,49 @@ export class TimesheetService {
          WHERE u.role = 'project_manager' AND u.is_active = 1`
       )) as RowDataPacket[];
 
-      // Timesheet counts (global)
-      const filledRows = (await database.query(
-        `SELECT COUNT(*) as filled_timesheets
-         FROM timesheets t
-         WHERE t.status IN ('pending', 'approved')${dateFilter}`,
-        dfParams
-      const projectCountRows = (await database.query(
-        `SELECT COUNT(*) as total_projects FROM projects WHERE status = 'Active'`
-      )) as RowDataPacket[];
-
-      // Total project managers
-      const pmCountRows = (await database.query(
-        `SELECT COUNT(*) as total_pms FROM users WHERE role = 'project_manager' AND is_active = 1`
-      )) as RowDataPacket[];
-
-      // Timesheet counts with date filter
-      let filledTimesheets = 0;
-      let pendingApproval = 0;
-      let approvedTimesheets = 0;
-      let rejectedTimesheets = 0;
-      let draftTimesheets = 0;
-      let totalHoursLogged = 0;
-
-      if (hasDateFilter) {
-        // Count timesheets that overlap with the date range
-        const timesheetCountsRows = (await database.query(
-          `SELECT 
-            COUNT(CASE WHEN status IN ('pending', 'approved') THEN 1 END) as filled,
-            COUNT(CASE WHEN status = 'pending' THEN 1 END) as pending,
-            COUNT(CASE WHEN status = 'approved' THEN 1 END) as approved,
-            COUNT(CASE WHEN status = 'rejected' THEN 1 END) as rejected,
-            COUNT(CASE WHEN status = 'draft' THEN 1 END) as draft,
-            COALESCE(SUM(CASE WHEN status IN ('pending', 'approved') THEN total_hours ELSE 0 END), 0) as total_hours
-          FROM timesheets
-          WHERE period_start <= ? AND period_end >= ?`,
-          [resolved.end!, resolved.start!]
-        )) as RowDataPacket[];
-        
-        filledTimesheets = Number(timesheetCountsRows[0]?.filled) || 0;
-        pendingApproval = Number(timesheetCountsRows[0]?.pending) || 0;
-        approvedTimesheets = Number(timesheetCountsRows[0]?.approved) || 0;
-        rejectedTimesheets = Number(timesheetCountsRows[0]?.rejected) || 0;
-        draftTimesheets = Number(timesheetCountsRows[0]?.draft) || 0;
-        totalHoursLogged = Number(timesheetCountsRows[0]?.total_hours) || 0;
-      } else {
-        // No date filter - count all timesheets
-        const timesheetCountsRows = (await database.query(
-          `SELECT 
-            COUNT(CASE WHEN status IN ('pending', 'approved') THEN 1 END) as filled,
-            COUNT(CASE WHEN status = 'pending' THEN 1 END) as pending,
-            COUNT(CASE WHEN status = 'approved' THEN 1 END) as approved,
-            COUNT(CASE WHEN status = 'rejected' THEN 1 END) as rejected,
-            COUNT(CASE WHEN status = 'draft' THEN 1 END) as draft,
-            COALESCE(SUM(CASE WHEN status IN ('pending', 'approved') THEN total_hours ELSE 0 END), 0) as total_hours
-          FROM timesheets`
-        )) as RowDataPacket[];
-        
-        filledTimesheets = Number(timesheetCountsRows[0]?.filled) || 0;
-        pendingApproval = Number(timesheetCountsRows[0]?.pending) || 0;
-        approvedTimesheets = Number(timesheetCountsRows[0]?.approved) || 0;
-        rejectedTimesheets = Number(timesheetCountsRows[0]?.rejected) || 0;
-        draftTimesheets = Number(timesheetCountsRows[0]?.draft) || 0;
-        totalHoursLogged = Number(timesheetCountsRows[0]?.total_hours) || 0;
-      }
-
-      const draftRows = (await database.query(
-        `SELECT COUNT(*) as draft_timesheets
-         FROM timesheets t
-         WHERE t.status = 'draft'${dateFilter}`,
+      // Timesheet counts with optional date overlap filtering
+      const timesheetCountsRows = (await database.query(
+        `SELECT
+          COUNT(CASE WHEN status IN ('pending', 'approved') THEN 1 END) as filled,
+          COUNT(CASE WHEN status = 'pending' THEN 1 END) as pending,
+          COUNT(CASE WHEN status = 'approved' THEN 1 END) as approved,
+          COUNT(CASE WHEN status = 'rejected' THEN 1 END) as rejected,
+          COUNT(CASE WHEN status = 'draft' THEN 1 END) as draft,
+          COALESCE(SUM(CASE WHEN status IN ('pending', 'approved') THEN total_hours ELSE 0 END), 0) as total_hours
+        FROM timesheets t
+        WHERE 1=1${dateFilter}`,
         dfParams
       )) as RowDataPacket[];
 
-      const totalHoursRows = (await database.query(
-        `SELECT COALESCE(SUM(t.total_hours), 0) as total_hours_logged
-         FROM timesheets t
-         WHERE 1=1${dateFilter}`,
-        dfParams
-      )) as RowDataPacket[];
-
-      // Employees assigned to active projects who have not submitted (no timesheet or only draft)
-      const notSubmittedRows = (await database.query(
-        `SELECT COUNT(DISTINCT e.id) as count
-         FROM projects p
-         JOIN user_projects up ON up.project_id = p.id
-         JOIN employees e ON up.user_id = e.user_id
-         LEFT JOIN timesheets t ON t.employee_id = e.id AND t.project_id = p.id${dateFilter ? ' AND t.period_start >= ? AND t.period_end <= ?' : ''}
-         WHERE p.status = 'Active' AND (t.id IS NULL OR t.status = 'draft')`,
-        dateFilter ? dfParams : []
-      )) as RowDataPacket[];
-
-      // Project statistics across all active projects
+      // Project stats: for each active project, count assigned employees and filled timesheets
       const projectStatsRows = (await database.query(
-        `SELECT 
+        `SELECT
           p.id as projectId,
           p.name as projectName,
-          COUNT(DISTINCT up.user_id) as totalAssigned,
-          COUNT(DISTINCT CASE WHEN t.status IN ('pending', 'approved') THEN t.employee_id END) as filled,
-          COUNT(DISTINCT up.user_id) - COUNT(DISTINCT CASE WHEN t.status IN ('pending', 'approved') THEN t.employee_id END) as notFilled
+          p.code as projectCode,
+          COUNT(DISTINCT e.id) as totalAssigned,
+          COUNT(DISTINCT CASE WHEN t.status IN ('pending', 'approved') THEN t.employee_id END) as filled
         FROM projects p
         LEFT JOIN user_projects up ON up.project_id = p.id
         LEFT JOIN employees e ON up.user_id = e.user_id
-        LEFT JOIN timesheets t ON t.employee_id = e.id AND t.project_id = p.id${dateFilter ? ' AND t.period_start >= ? AND t.period_end <= ?' : ''}
+        LEFT JOIN timesheets t ON t.employee_id = e.id AND t.project_id = p.id${hasDateFilter ? ' AND t.period_start <= ? AND t.period_end >= ?' : ''}
         WHERE p.status = 'Active'
-        GROUP BY p.id, p.name
+        GROUP BY p.id, p.name, p.code
         ORDER BY p.name`,
-        dateFilter ? dfParams : []
+        hasDateFilter ? dfParams : []
       )) as RowDataPacket[];
 
-      const dashboardData = {
-        totalEmployees: employeeRows[0]?.total_employees || 0,
-        totalProjects: projectRows[0]?.total_projects || 0,
-        totalProjectManagers: projectManagerRows[0]?.total_project_managers || 0,
-        filledTimesheets: filledRows[0]?.filled_timesheets || 0,
-        pendingApproval: pendingRows[0]?.pending_approval || 0,
-        approvedTimesheets: approvedRows[0]?.approved_timesheets || 0,
-        rejectedTimesheets: rejectedRows[0]?.rejected_timesheets || 0,
-        draftTimesheets: draftRows[0]?.draft_timesheets || 0,
-        notSubmitted: notSubmittedRows[0]?.count || 0,
-        totalHoursLogged: Number(totalHoursRows[0]?.total_hours_logged || 0),
-        projectStats: projectStatsRows
-      // Project statistics - get employee counts and timesheet counts per project
-      let projectStatsRows: RowDataPacket[];
-      
-      if (hasDateFilter) {
-        projectStatsRows = (await database.query(
-          `SELECT 
-            p.id as projectId,
-            p.name as projectName,
-            p.code as projectCode,
-            (SELECT COUNT(DISTINCT e2.id) 
-             FROM user_projects up2 
-             JOIN users u2 ON up2.user_id = u2.id AND u2.is_active = 1
-             JOIN employees e2 ON e2.user_id = u2.id
-             WHERE up2.project_id = p.id) as totalAssigned,
-            COUNT(CASE WHEN t.status IN ('pending', 'approved') AND t.period_start <= ? AND t.period_end >= ? THEN t.id END) as filled,
-            COUNT(CASE WHEN t.status = 'draft' AND t.period_start <= ? AND t.period_end >= ? THEN t.id END) as notFilled
-          FROM projects p
-          LEFT JOIN timesheets t ON t.project_id = p.id
-          WHERE p.status = 'Active'
-          GROUP BY p.id, p.name, p.code
-          ORDER BY p.name`,
-          [resolved.end!, resolved.start!, resolved.end!, resolved.start!]
-        )) as RowDataPacket[];
-      } else {
-        projectStatsRows = (await database.query(
-          `SELECT 
-            p.id as projectId,
-            p.name as projectName,
-            p.code as projectCode,
-            (SELECT COUNT(DISTINCT e2.id) 
-             FROM user_projects up2 
-             JOIN users u2 ON up2.user_id = u2.id AND u2.is_active = 1
-             JOIN employees e2 ON e2.user_id = u2.id
-             WHERE up2.project_id = p.id) as totalAssigned,
-            COUNT(CASE WHEN t.status IN ('pending', 'approved') THEN t.id END) as filled,
-            COUNT(CASE WHEN t.status = 'draft' THEN t.id END) as notFilled
-          FROM projects p
-          LEFT JOIN timesheets t ON t.project_id = p.id
-          WHERE p.status = 'Active'
-          GROUP BY p.id, p.name, p.code
-          ORDER BY p.name`
-        )) as RowDataPacket[];
-      }
+      const filledTimesheets = Number(timesheetCountsRows[0]?.filled) || 0;
+      const pendingApproval = Number(timesheetCountsRows[0]?.pending) || 0;
+      const approvedTimesheets = Number(timesheetCountsRows[0]?.approved) || 0;
+      const rejectedTimesheets = Number(timesheetCountsRows[0]?.rejected) || 0;
+      const draftTimesheets = Number(timesheetCountsRows[0]?.draft) || 0;
+      const totalHoursLogged = Number(timesheetCountsRows[0]?.total_hours) || 0;
 
       const dashboardData = {
         totalEmployees: Number(employeeRows[0]?.total_employees) || 0,
-        totalProjects: Number(projectCountRows[0]?.total_projects) || 0,
-        totalProjectManagers: Number(pmCountRows[0]?.total_pms) || 0,
+        totalProjects: Number(projectRows[0]?.total_projects) || 0,
+        totalProjectManagers: Number(projectManagerRows[0]?.total_project_managers) || 0,
         filledTimesheets,
         pendingApproval,
         approvedTimesheets,
