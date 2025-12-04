@@ -7,7 +7,6 @@ services:
     build:
       context: ./nginx
       dockerfile: Dockerfile
-    container_name: kbs-nginx
     restart: unless-stopped
     deploy:
       resources:
@@ -33,7 +32,6 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: kbs-backend
     restart: unless-stopped
     deploy:
       resources:
@@ -72,7 +70,6 @@ services:
         VITE_API_BASE_URL: /api
         VITE_BACKEND_URL: ''
         VITE_LOGIN_BACKGROUND_URL: https://source.unsplash.com/random?wallpapers
-    container_name: kbs-frontend
     restart: unless-stopped
     deploy:
       resources:
