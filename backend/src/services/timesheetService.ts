@@ -10,6 +10,53 @@ import {
 } from '../models/Timesheet';
 
 export class TimesheetService {
+  private resolveRange(range?: string, startDate?: string, endDate?: string): { start?: string; end?: string } {
+    if (startDate && endDate) return { start: startDate, end: endDate };
+    const now = new Date();
+    const toISO = (d: Date) => d.toISOString().slice(0, 10);
+    const firstDayOfCurrentWeek = () => {
+      const d = new Date(now);
+      const day = d.getDay();
+      const diff = (day === 0 ? -6 : 1) - day; // Monday start
+      d.setDate(d.getDate() + diff);
+      d.setHours(0, 0, 0, 0);
+      return d;
+    };
+    switch (range) {
+      case 'all': {
+        // No date filtering
+        return {};
+      }
+      case 'last-week': {
+        const end = firstDayOfCurrentWeek();
+        const start = new Date(end);
+        start.setDate(start.getDate() - 7);
+        return { start: toISO(start), end: toISO(new Date(end.getTime() - 1)) };
+      }
+      case 'last-month': {
+        const start = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+        const end = new Date(now.getFullYear(), now.getMonth(), 0);
+        return { start: toISO(start), end: toISO(end) };
+      }
+      case 'last-quarter': {
+        const currentQuarter = Math.floor(now.getMonth() / 3);
+        const start = new Date(now.getFullYear(), (currentQuarter - 1) * 3, 1);
+        const end = new Date(now.getFullYear(), currentQuarter * 3, 0);
+        return { start: toISO(start), end: toISO(end) };
+      }
+      case 'year-to-date': {
+        const start = new Date(now.getFullYear(), 0, 1);
+        return { start: toISO(start), end: toISO(now) };
+      }
+      case 'current':
+      default: {
+        const start = firstDayOfCurrentWeek();
+        const end = new Date(start);
+        end.setDate(end.getDate() + 6);
+        return { start: toISO(start), end: toISO(end) };
+      }
+    }
+  }
   async getCurrentTimesheet(employeeId: number, projectId: number): Promise<{ success: boolean; timesheet?: Timesheet; message?: string }> {
     try {
       // Get project details to determine period type
@@ -34,7 +81,7 @@ export class TimesheetService {
            p.name as project_name, 
            p.period_type,
            p.auto_approve,
-           u.name as employee_name 
+           CONCAT(u.first_name,' ',u.last_name) as employee_name 
          FROM timesheets t 
          JOIN projects p ON t.project_id = p.id 
          JOIN employees e ON t.employee_id = e.id
@@ -58,7 +105,7 @@ export class TimesheetService {
            p.name as project_name, 
            p.period_type,
            p.auto_approve,
-           u.name as employee_name 
+           CONCAT(u.first_name,' ',u.last_name) as employee_name 
          FROM timesheets t 
          JOIN projects p ON t.project_id = p.id 
          JOIN employees e ON t.employee_id = e.id
@@ -129,7 +176,7 @@ export class TimesheetService {
            p.name as project_name,
            p.period_type,
            p.auto_approve,
-           u.name as employee_name 
+           CONCAT(u.first_name,' ',u.last_name) as employee_name 
          FROM timesheets t 
          JOIN projects p ON t.project_id = p.id 
          JOIN employees e ON t.employee_id = e.id
@@ -159,7 +206,7 @@ export class TimesheetService {
            p.name as project_name,
            p.period_type,
            p.auto_approve,
-           u.name as employee_name
+           CONCAT(u.first_name,' ',u.last_name) as employee_name
          FROM timesheets t 
          JOIN projects p ON t.project_id = p.id 
          JOIN employees e ON t.employee_id = e.id
@@ -401,7 +448,7 @@ export class TimesheetService {
            p.name as project_name,
            p.period_type,
            p.auto_approve,
-           u.name as employee_name,
+           CONCAT(u.first_name,' ',u.last_name) as employee_name,
            u.email as employee_email
          FROM timesheets t 
          JOIN projects p ON t.project_id = p.id 
@@ -679,14 +726,14 @@ export class TimesheetService {
     try {
       console.log('Getting employees for manager ID:', managerId);
       const rows = (await database.query(
-        `SELECT DISTINCT u.id, u.name, u.email, u.phone, e.id as employee_id
+        `SELECT DISTINCT u.id, CONCAT(u.first_name,' ',u.last_name) AS name, u.first_name, u.last_name, u.email, u.phone, e.id as employee_id
          FROM user_projects up1
          JOIN projects p ON up1.project_id = p.id
          JOIN user_projects up2 ON up2.project_id = p.id
          JOIN employees e ON up2.user_id = e.user_id
          JOIN users u ON e.user_id = u.id
          WHERE up1.user_id = ? AND p.status = 'Active'
-         ORDER BY u.name`,
+         ORDER BY u.first_name, u.last_name`,
         [managerId]
       )) as RowDataPacket[];
       
@@ -716,7 +763,7 @@ export class TimesheetService {
   async getEmployeesNotSubmitted(managerId: number): Promise<{ success: boolean; employees?: any[]; message?: string }> {
     try {
       const rows = (await database.query(
-        `SELECT DISTINCT u.id, u.name, u.email, p.name as project_name, 
+        `SELECT DISTINCT u.id, CONCAT(u.first_name,' ',u.last_name) AS name, u.first_name, u.last_name, u.email, p.name as project_name, 
            COALESCE(t.status, 'not_created') as timesheet_status
          FROM user_projects up1
          JOIN projects p ON up1.project_id = p.id
@@ -726,7 +773,7 @@ export class TimesheetService {
          LEFT JOIN timesheets t ON t.employee_id = e.id AND t.project_id = p.id
          WHERE up1.user_id = ? AND p.status = 'Active' 
            AND (t.id IS NULL OR t.status = 'draft')
-         ORDER BY u.name, p.name`,
+         ORDER BY u.first_name, u.last_name, p.name`,
         [managerId]
       )) as RowDataPacket[];
       
@@ -738,9 +785,12 @@ export class TimesheetService {
   }
 
   // Get dashboard statistics
-  async getDashboardStats(managerId: number, range: string): Promise<{ success: boolean; data?: any; message?: string }> {
+  async getDashboardStats(params: { managerId: number; range?: string; startDate?: string; endDate?: string }): Promise<{ success: boolean; data?: any; message?: string }> {
     try {
-      console.log('Getting dashboard stats for manager:', managerId, 'range:', range);
+      const { managerId, range, startDate, endDate } = params;
+      const resolved = this.resolveRange(range, startDate, endDate);
+      const dateFilter = resolved.start && resolved.end ? ` AND t.period_start >= ? AND t.period_end <= ?` : '';
+      const dfParams = resolved.start && resolved.end ? [resolved.start, resolved.end] : [];
       
       // Get total employees managed by this PM
       const employeeRows = (await database.query(
@@ -759,8 +809,8 @@ export class TimesheetService {
          FROM timesheets t
          JOIN projects p ON t.project_id = p.id
          JOIN user_projects up ON up.project_id = p.id
-         WHERE up.user_id = ? AND t.status IN ('pending', 'approved')`,
-        [managerId]
+         WHERE up.user_id = ? AND t.status IN ('pending', 'approved')${dateFilter}`,
+        [managerId, ...dfParams]
       )) as RowDataPacket[];
       
       const pendingRows = (await database.query(
@@ -768,8 +818,8 @@ export class TimesheetService {
          FROM timesheets t
          JOIN projects p ON t.project_id = p.id
          JOIN user_projects up ON up.project_id = p.id
-         WHERE up.user_id = ? AND t.status = 'pending'`,
-        [managerId]
+         WHERE up.user_id = ? AND t.status = 'pending'${dateFilter}`,
+        [managerId, ...dfParams]
       )) as RowDataPacket[];
       
       const approvedRows = (await database.query(
@@ -777,8 +827,8 @@ export class TimesheetService {
          FROM timesheets t
          JOIN projects p ON t.project_id = p.id
          JOIN user_projects up ON up.project_id = p.id
-         WHERE up.user_id = ? AND t.status = 'approved'`,
-        [managerId]
+         WHERE up.user_id = ? AND t.status = 'approved'${dateFilter}`,
+        [managerId, ...dfParams]
       )) as RowDataPacket[];
       
       const rejectedRows = (await database.query(
@@ -786,27 +836,27 @@ export class TimesheetService {
          FROM timesheets t
          JOIN projects p ON t.project_id = p.id
          JOIN user_projects up ON up.project_id = p.id
-         WHERE up.user_id = ? AND t.status = 'rejected'`,
-        [managerId]
+         WHERE up.user_id = ? AND t.status = 'rejected'${dateFilter}`,
+        [managerId, ...dfParams]
       )) as RowDataPacket[];
       
       // Get project statistics
       const projectStatsRows = (await database.query(
         `SELECT 
-           p.id as projectId,
-           p.name as projectName,
-           COUNT(DISTINCT up2.user_id) as totalAssigned,
-           COUNT(DISTINCT CASE WHEN t.status IN ('pending', 'approved') THEN t.employee_id END) as filled,
-           COUNT(DISTINCT up2.user_id) - COUNT(DISTINCT CASE WHEN t.status IN ('pending', 'approved') THEN t.employee_id END) as notFilled
-         FROM user_projects up1
-         JOIN projects p ON up1.project_id = p.id
-         JOIN user_projects up2 ON up2.project_id = p.id
-         JOIN employees e ON up2.user_id = e.user_id
-         LEFT JOIN timesheets t ON t.employee_id = e.id AND t.project_id = p.id
-         WHERE up1.user_id = ? AND p.status = 'Active'
-         GROUP BY p.id, p.name
-         ORDER BY p.name`,
-        [managerId]
+          p.id as projectId,
+          p.name as projectName,
+          COUNT(DISTINCT up2.user_id) as totalAssigned,
+          COUNT(DISTINCT CASE WHEN t.status IN ('pending', 'approved') THEN t.employee_id END) as filled,
+          COUNT(DISTINCT up2.user_id) - COUNT(DISTINCT CASE WHEN t.status IN ('pending', 'approved') THEN t.employee_id END) as notFilled
+        FROM user_projects up1
+        JOIN projects p ON up1.project_id = p.id
+        JOIN user_projects up2 ON up2.project_id = p.id
+        JOIN employees e ON up2.user_id = e.user_id
+        LEFT JOIN timesheets t ON t.employee_id = e.id AND t.project_id = p.id${dateFilter ? ' AND t.period_start >= ? AND t.period_end <= ?' : ''}
+        WHERE up1.user_id = ? AND p.status = 'Active'
+        GROUP BY p.id, p.name
+        ORDER BY p.name`,
+        [...(dateFilter ? dfParams : []), managerId]
       )) as RowDataPacket[];
       
       const dashboardData = {
@@ -824,6 +874,252 @@ export class TimesheetService {
     } catch (error) {
       console.error('Get dashboard stats error:', error);
       return { success: false, message: 'Failed to get dashboard statistics' };
+    }
+  }
+
+  // NEW: Admin method to get all timesheets for a project
+  async getTimesheetsByProjectId(projectId: number): Promise<{ success: boolean; timesheets?: Timesheet[]; message?: string }> {
+    try {
+      const rows = (await database.query(
+        `SELECT
+           t.*,
+           p.name as project_name,
+           p.period_type,
+           p.auto_approve,
+           CONCAT(u.first_name,' ',u.last_name) as employee_name
+         FROM timesheets t
+         JOIN projects p ON t.project_id = p.id
+         JOIN employees e ON t.employee_id = e.id
+         JOIN users u ON e.user_id = u.id
+         WHERE t.project_id = ?
+         ORDER BY u.first_name, u.last_name, t.period_start DESC`,
+        [projectId]
+      )) as RowDataPacket[];
+      return { success: true, timesheets: rows as Timesheet[] };
+    } catch (error) {
+      console.error(`Get timesheets by project ID error: ${error}`);
+      return { success: false, message: 'Failed to get timesheets for project' };
+    }
+  }
+
+  // Get timesheets by status for a manager (scoped via user_projects)
+  async getTimesheetsByStatusForManager(managerId: number, status: 'pending' | 'approved' | 'rejected'): Promise<{ success: boolean; timesheets?: Timesheet[]; message?: string }> {
+    try {
+      const statusFilter = status;
+      const rows = (await database.query(
+        `SELECT 
+           t.*,
+           p.name as project_name,
+           p.period_type,
+           p.auto_approve,
+           CONCAT(u.first_name,' ',u.last_name) as employee_name,
+           u.email as employee_email
+         FROM timesheets t 
+         JOIN projects p ON t.project_id = p.id 
+         JOIN employees e ON t.employee_id = e.id
+         JOIN users u ON e.user_id = u.id
+         JOIN user_projects up ON up.project_id = p.id AND up.user_id = ?
+         WHERE t.status = ?
+         ORDER BY 
+           CASE WHEN ? = 'pending' THEN t.submitted_at END ASC,
+           CASE WHEN ? IN ('approved','rejected') THEN t.updated_at END DESC`,
+        [managerId, statusFilter, statusFilter, statusFilter]
+      )) as RowDataPacket[];
+      return { success: true, timesheets: rows as Timesheet[] };
+    } catch (error) {
+      console.error('Get timesheets by status for manager error:', error);
+      return { success: false, message: 'Failed to get timesheets by status' };
+    }
+  }
+
+  // Get timesheets by status for Admin (global)
+  async getTimesheetsByStatusAdmin(status: 'pending' | 'approved' | 'rejected'): Promise<{ success: boolean; timesheets?: Timesheet[]; message?: string }> {
+    try {
+      const rows = (await database.query(
+        `SELECT 
+           t.*,
+           p.name as project_name,
+           p.period_type,
+           p.auto_approve,
+           CONCAT(u.first_name,' ',u.last_name) as employee_name,
+           u.email as employee_email
+         FROM timesheets t 
+         JOIN projects p ON t.project_id = p.id 
+         JOIN employees e ON t.employee_id = e.id
+         JOIN users u ON e.user_id = u.id
+         WHERE t.status = ?
+         ORDER BY 
+           CASE WHEN ? = 'pending' THEN t.submitted_at END ASC,
+           CASE WHEN ? IN ('approved','rejected') THEN t.updated_at END DESC`,
+        [status, status, status]
+      )) as RowDataPacket[];
+      return { success: true, timesheets: rows as Timesheet[] };
+    } catch (error) {
+      console.error('Get timesheets by status (admin) error:', error);
+      return { success: false, message: 'Failed to get admin timesheets by status' };
+    }
+  }
+
+  // Get global dashboard statistics for Admin (all projects/employees)
+  async getDashboardStatsAdmin(params: { range?: string; startDate?: string; endDate?: string }): Promise<{ success: boolean; data?: any; message?: string }> {
+    try {
+      const { range, startDate, endDate } = params;
+      const resolved = this.resolveRange(range, startDate, endDate);
+      const dateFilter = resolved.start && resolved.end ? ` AND t.period_start >= ? AND t.period_end <= ?` : '';
+      const dfParams = resolved.start && resolved.end ? [resolved.start, resolved.end] : [];
+      // Total employees in the system
+      const employeeRows = (await database.query(
+        `SELECT COUNT(DISTINCT e.id) as total_employees
+         FROM employees e`
+      )) as RowDataPacket[];
+
+      // Timesheet counts (global)
+      const filledRows = (await database.query(
+        `SELECT COUNT(*) as filled_timesheets
+         FROM timesheets t
+         WHERE t.status IN ('pending', 'approved')${dateFilter}`,
+        dfParams
+      )) as RowDataPacket[];
+
+      const pendingRows = (await database.query(
+        `SELECT COUNT(*) as pending_approval
+         FROM timesheets t
+         WHERE t.status = 'pending'${dateFilter}`,
+        dfParams
+      )) as RowDataPacket[];
+
+      const approvedRows = (await database.query(
+        `SELECT COUNT(*) as approved_timesheets
+         FROM timesheets t
+         WHERE t.status = 'approved'${dateFilter}`,
+        dfParams
+      )) as RowDataPacket[];
+
+      const rejectedRows = (await database.query(
+        `SELECT COUNT(*) as rejected_timesheets
+         FROM timesheets t
+         WHERE t.status = 'rejected'${dateFilter}`,
+        dfParams
+      )) as RowDataPacket[];
+
+      // Employees assigned to active projects who have not submitted (no timesheet or only draft)
+      const notSubmittedRows = (await database.query(
+        `SELECT COUNT(DISTINCT e.id) as count
+         FROM projects p
+         JOIN user_projects up ON up.project_id = p.id
+         JOIN employees e ON up.user_id = e.user_id
+         LEFT JOIN timesheets t ON t.employee_id = e.id AND t.project_id = p.id${dateFilter ? ' AND t.period_start >= ? AND t.period_end <= ?' : ''}
+         WHERE p.status = 'Active' AND (t.id IS NULL OR t.status = 'draft')`,
+        dateFilter ? dfParams : []
+      )) as RowDataPacket[];
+
+      // Project statistics across all active projects
+      const projectStatsRows = (await database.query(
+        `SELECT 
+          p.id as projectId,
+          p.name as projectName,
+          COUNT(DISTINCT up.user_id) as totalAssigned,
+          COUNT(DISTINCT CASE WHEN t.status IN ('pending', 'approved') THEN t.employee_id END) as filled,
+          COUNT(DISTINCT up.user_id) - COUNT(DISTINCT CASE WHEN t.status IN ('pending', 'approved') THEN t.employee_id END) as notFilled
+        FROM projects p
+        LEFT JOIN user_projects up ON up.project_id = p.id
+        LEFT JOIN employees e ON up.user_id = e.user_id
+        LEFT JOIN timesheets t ON t.employee_id = e.id AND t.project_id = p.id${dateFilter ? ' AND t.period_start >= ? AND t.period_end <= ?' : ''}
+        WHERE p.status = 'Active'
+        GROUP BY p.id, p.name
+        ORDER BY p.name`,
+        dateFilter ? dfParams : []
+      )) as RowDataPacket[];
+
+      const dashboardData = {
+        totalEmployees: employeeRows[0]?.total_employees || 0,
+        filledTimesheets: filledRows[0]?.filled_timesheets || 0,
+        pendingApproval: pendingRows[0]?.pending_approval || 0,
+        approvedTimesheets: approvedRows[0]?.approved_timesheets || 0,
+        rejectedTimesheets: rejectedRows[0]?.rejected_timesheets || 0,
+        notSubmitted: notSubmittedRows[0]?.count || 0,
+        projectStats: projectStatsRows
+      };
+
+      return { success: true, data: dashboardData };
+    } catch (error) {
+      console.error('Get admin dashboard stats error:', error);
+      return { success: false, message: 'Failed to get admin dashboard statistics' };
+    }
+  }
+
+  async getTimesheetDetails(params: { scopeUserId: number; isAdmin: boolean; status?: string; projectId?: number; range?: string; startDate?: string; endDate?: string }): Promise<{ success: boolean; items?: any[]; message?: string }> {
+    const { scopeUserId, isAdmin, status, projectId, range, startDate, endDate } = params;
+    try {
+      const resolved = this.resolveRange(range, startDate, endDate);
+      const dateJoinFilter = resolved.start && resolved.end ? ' AND t.period_start >= ? AND t.period_end <= ?' : '';
+      const dfParams = resolved.start && resolved.end ? [resolved.start, resolved.end] : [];
+      // Base filters for PM (restrict to managed projects)
+      const scopeJoin = isAdmin
+        ? ''
+        : 'JOIN user_projects scope_up ON scope_up.project_id = p.id AND scope_up.user_id = ?';
+      const scopeParams = isAdmin ? [] : [scopeUserId];
+
+      if (status === 'not-submitted' || status === 'not-created') {
+        const query = `
+          SELECT DISTINCT e.id as employeeId, CONCAT(u.first_name,' ',u.last_name) as employeeName, u.email as employeeEmail,
+                 e.employement_start_date as employmentStartDate,
+                 p.id as projectId, p.name as projectName,
+                  COALESCE(t.status, 'not_created') as status,
+                  t.period_start as periodStart,
+                  t.period_end as periodEnd,
+                  p.period_type as periodType
+          FROM projects p
+          ${scopeJoin}
+          JOIN user_projects up ON up.project_id = p.id
+          JOIN employees e ON up.user_id = e.user_id
+          JOIN users u ON e.user_id = u.id
+          LEFT JOIN timesheets t ON t.employee_id = e.id AND t.project_id = p.id${dateJoinFilter}
+          WHERE p.status = 'Active'
+            ${projectId ? 'AND p.id = ?' : ''}
+            AND (${status === 'not-created' ? 't.id IS NULL' : "(t.id IS NULL OR t.status = 'draft')"})
+          ORDER BY employeeName`;
+        const rows = (await database.query(query, [...scopeParams, ...dfParams, ...(projectId ? [projectId] : [])])) as RowDataPacket[];
+        const items = (rows as any[]).map((r: any) => ({ ...r }));
+        // Fill period for not-created (no timesheet) using project period type and current date
+        for (const r of items) {
+          if (!r.periodStart || !r.periodEnd) {
+            try {
+              const period = await this.calculatePeriodDates(r.periodType || 'weekly', new Date());
+              r.periodStart = period.periodStart;
+              r.periodEnd = period.periodEnd;
+            } catch (e) {
+              // leave as null if calculation fails
+            }
+          }
+        }
+        return { success: true, items };
+      }
+
+      const statusFilter = status === 'filled' ? `t.status IN ('pending','approved')` : status ? `t.status = '${status}'` : `t.status IN ('pending','approved','rejected','draft')`;
+      const query = `
+        SELECT DISTINCT t.id as id,
+               e.id as employeeId, CONCAT(u.first_name,' ',u.last_name) as employeeName, u.email as employeeEmail,
+               e.employement_start_date as employmentStartDate,
+               p.id as projectId, p.name as projectName,
+               t.status as status, t.submitted_at as submittedAt,
+               t.period_start as periodStart,
+               t.period_end as periodEnd
+        FROM projects p
+        ${scopeJoin}
+        JOIN user_projects up ON up.project_id = p.id
+        JOIN employees e ON up.user_id = e.user_id
+        JOIN users u ON e.user_id = u.id
+        LEFT JOIN timesheets t ON t.employee_id = e.id AND t.project_id = p.id${dateJoinFilter}
+        WHERE p.status = 'Active'
+          ${projectId ? 'AND p.id = ?' : ''}
+          AND ${statusFilter}
+        ORDER BY employeeName`;
+      const rows = (await database.query(query, [...scopeParams, ...dfParams, ...(projectId ? [projectId] : [])])) as RowDataPacket[];
+      return { success: true, items: rows as any[] };
+    } catch (error) {
+      console.error('Get timesheet details error:', error);
+      return { success: false, message: 'Failed to get timesheet details' };
     }
   }
 }

@@ -11,11 +11,24 @@ export default  interface Employee{
     last_name:string;
     email:string;
     phone:string;
+    location?: string | null;
     college_name?:string | null;
     college_address?:string | null;
     degree?:string | null;
+    college_Dso_name?: string | null;
+    college_Dso_email?: string | null;
+    college_Dso_phone?: string | null;
+    // Primary Emergency Contact
+    primary_emergency_contact_full_name?: string | null;
+    primary_emergency_contact_relationship?: string | null;
+    primary_emergency_contact_home_phone?: string | null;
+    // Secondary Emergency Contact
+    secondary_emergency_contact_full_name?: string | null;
+    secondary_emergency_contact_relationship?: string | null;
+    secondary_emergency_contact_home_phone?: string | null;
     job_title?:string;//rajan
     job_start_date?:string; //rajan
+    employement_start_date?: string | null;
     start_date?:string
     end_date?:string;
     visa_status?:string;
@@ -30,6 +43,11 @@ export default  interface Employee{
     reports?:string //rajan reports 
     role: UserRole;
     no_of_hours: number;
+    offerLetter?: {
+      content: string;
+      lastEditedBy?: string;
+      lastEditedAt?: string; // ISO string
+    };
 
 }
  

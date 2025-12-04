@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { TimesheetService } from '../services/timesheetService';
 import { authenticate } from '../middleware/authMiddleware';
-import {requirePMOrAdmin} from '../middleware/roleMiddleware';
+import {requireAdmin, requirePMOrAdmin} from '../middleware/roleMiddleware';
 
 import Logger from '../utils/logger';
 import database from '../config/database';
@@ -250,6 +250,22 @@ router.get('/manager/pending', authenticate, requirePMOrAdmin, async (req: Reque
   }
 });
 
+// Manager: Get timesheets by status (approved/rejected/pending)
+router.get('/manager/status/:status', authenticate, requirePMOrAdmin, async (req: Request, res: Response) => {
+  try {
+    const managerId = (req as any).user.userId;
+    const statusParam = (req.params.status || '').toLowerCase();
+    if (!['pending', 'approved', 'rejected'].includes(statusParam)) {
+      return res.status(400).json({ success: false, message: 'Invalid status. Use pending | approved | rejected' });
+    }
+    const result = await timesheetService.getTimesheetsByStatusForManager(managerId, statusParam as any);
+    res.json(result);
+  } catch (error) {
+    Logger.error(`Get manager timesheets by status error: ${error}`);
+    res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+});
+
 // Approve timesheet (NO CHANGE - managers use userId)
 router.post('/:id/approve', authenticate, requirePMOrAdmin, async (req: Request, res: Response) => {
   try {
@@ -392,6 +408,21 @@ router.get('/manager/not-submitted', authenticate, requirePMOrAdmin, async (req:
   }
 });
 
+// Admin: Get timesheets by status (global)
+router.get('/admin/status/:status', authenticate, requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const statusParam = (req.params.status || '').toLowerCase();
+    if (!['pending', 'approved', 'rejected'].includes(statusParam)) {
+      return res.status(400).json({ success: false, message: 'Invalid status. Use pending | approved | rejected' });
+    }
+    const result = await timesheetService.getTimesheetsByStatusAdmin(statusParam as any);
+    res.json(result);
+  } catch (error) {
+    Logger.error(`Get admin timesheets by status error: ${error}`);
+    res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+});
+
 // NEW: Route to handle project period type changes
 router.put('/projects/:id/period-type', authenticate, requirePMOrAdmin, async (req: Request, res: Response) => {
   try {
@@ -432,7 +463,7 @@ router.get('/manager/dashboard', authenticate, requirePMOrAdmin, async (req: Req
   try {
     const managerId = (req as any).user.userId;
     const range = (req.query.range as string) || 'monthly';
-    const result = await timesheetService.getDashboardStats(managerId, range);
+    const result = await timesheetService.getDashboardStats({ managerId, range });
     res.json(result);
   } catch (error) {
     Logger.error(`Get dashboard stats error: ${error}`);
@@ -511,6 +542,25 @@ router.get('/:id/edit', authenticate, async (req: Request, res: Response) => {
   } catch (error) {
     Logger.error(`Get timesheet for edit error: ${error}`);
     res.status(500).json({ success: false, message: 'Internal server error' }); // The error message was already a string, so no change needed here.
+  }
+});
+
+// NEW: Admin route to get all timesheets for a specific project
+router.get('/project/:projectId', authenticate, requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const projectId = parseInt(req.params.projectId, 10);
+    if (isNaN(projectId)) {
+      return res.status(400).json({ success: false, message: 'Invalid project ID' });
+    }
+
+    const result = await timesheetService.getTimesheetsByProjectId(projectId);
+    if (!result.success) {
+      return res.status(404).json(result);
+    }
+    res.json(result);
+  } catch (error) {
+    Logger.error(`Get timesheets by project ID error: ${error}`);
+    res.status(500).json({ success: false, message: 'Internal server error' });
   }
 });
 

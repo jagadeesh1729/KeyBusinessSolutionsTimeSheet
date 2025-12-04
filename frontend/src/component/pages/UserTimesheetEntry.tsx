@@ -8,6 +8,7 @@ import {
 import { useParams } from 'react-router-dom';
 import { useAssignedProjects, useCurrentTimesheet, useTimesheetById } from '../hooks/useTimesheet';
 import TimesheetForm from './TimesheetForm';
+import type Project from '../types/project';
 
 const TimesheetEntry: React.FC = () => {
   const { id } = useParams(); // Get timesheet ID from URL if editing
@@ -27,11 +28,21 @@ const TimesheetEntry: React.FC = () => {
   const timesheetLoading = isEditMode ? editTimesheetLoading : currentTimesheetLoading;
   const timesheetError = isEditMode ? editTimesheetError : currentTimesheetError;
 
-  const projectForForm = useMemo(() => {
+  const projectForForm: Project | null = useMemo(() => {
     if (isEditMode) {
-      return editTimesheet?.project || null;
+      const p = editTimesheet?.project as any;
+      if (!p) return null;
+      // Normalize timesheet.project (camelCase) to Project type (snake_case)
+      return {
+        id: p.id,
+        name: p.name,
+        code: p.code,
+        status: 'Active',
+        auto_approve: Boolean(p.auto_approve ?? p.autoApprove),
+        period_type: p.period_type ?? p.periodType ?? 'weekly',
+      } as Project;
     }
-    return currentProject;
+    return currentProject as Project | null;
   }, [isEditMode, editTimesheet, currentProject]);
 
   if (projectsLoading || timesheetLoading) {

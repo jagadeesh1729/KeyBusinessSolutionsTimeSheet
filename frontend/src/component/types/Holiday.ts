@@ -14,14 +14,15 @@ export interface DailyEntry {
 export interface Timesheet {
   id: number;
   employeeId: number;
-  projectId: number;
+  projectId?: number;
   periodType: 'weekly' | 'bi-monthly' | 'monthly';
-  periodStart: DateString;
-  periodEnd: DateString;
-  status: 'draft' | 'pending' | 'approved' | 'rejected';
+  periodStart: DateString | string;
+  periodEnd: DateString | string;
+  status: 'draft' | 'pending' | 'approved' | 'rejected' | string;
   totalHours: number;
-  autoApprove: boolean;
+  autoApprove?: boolean;
   dailyEntries: DailyEntry[];
+  entries?: DailyEntry[];
   createdAt: string;
   submittedAt?: string;
   approvedAt?: string;
@@ -29,18 +30,24 @@ export interface Timesheet {
   rejectedAt?: string;
   rejectedBy?: number;
   rejectionReason?: string;
-  updatedAt: string;
+  updatedAt?: string;
   project?: {
     id: number;
     name: string;
+    code?: string;
+    clientAddress?: string;
     autoApprove: boolean;
     periodType: 'weekly' | 'bi-monthly' | 'monthly';
+    signature_required?: boolean;
+    signatureRequired?: boolean;
   };
   employee?: {
     id: number;
     name: string;
     email: string;
   };
+  employeeName?: string;
+  employeeEmail?: string;
 }
 
 export interface CreateTimesheetRequest {
@@ -55,7 +62,7 @@ export interface UpdateTimesheetRequest {
   periodStart: DateString;
   periodEnd: DateString;
   dailyEntries: DailyEntry[];
-  status: 'draft' | 'pending' | 'approved' | 'rejected';
+  status: string;
 }
 
 export interface SubmitTimesheetRequest {
@@ -83,49 +90,6 @@ export interface TimesheetResponse {
   timesheet?: Timesheet;
   message?: string;
 }
-// src/types/timesheet.ts
-export interface TaskEntry {
-  name: string;
-  hours: number;
-}
-
-export interface DailyEntry {
-  date: string;
-  hours: number;
-  tasks: TaskEntry[];
-}
-
-export interface Timesheet {
-  id: number;
-  employeeId: number;
-  projectId: number;
-  periodType: 'weekly' | 'bi-monthly' | 'monthly';
-  periodStart: string;
-  periodEnd: string;
-  status: 'draft' | 'pending' | 'approved' | 'rejected';
-  totalHours: number;
-  autoApprove: boolean;
-  dailyEntries: DailyEntry[];
-  createdAt: string;
-  submittedAt?: string;
-  approvedAt?: string;
-  approvedBy?: number;
-  rejectedAt?: string;
-  rejectedBy?: number;
-  rejectionReason?: string;
-  updatedAt: string;
-  project?: {
-    id: number;
-    name: string;
-    autoApprove: boolean;
-    periodType: 'weekly' | 'bi-monthly' | 'monthly';
-  };
-  employee?: {
-    id: number;
-    name: string;
-    email: string;
-  };
-}
 
 export interface Project {
   id: number;
@@ -138,6 +102,7 @@ export interface Project {
 export interface ProjectStat {
   projectId: number;
   projectName: string;
+  projectCode?: string;
   totalAssigned: number;
   filled: number;
   notFilled: number;
@@ -145,10 +110,15 @@ export interface ProjectStat {
 
 export interface DashboardStats {
   totalEmployees: number;
+  totalProjects: number;
+  totalProjectManagers: number;
   filledTimesheets: number;
   pendingApproval: number;
   approvedTimesheets: number;
   rejectedTimesheets: number;
+  draftTimesheets: number;
+  notSubmitted: number;
+  totalHoursLogged: number;
   projectStats: ProjectStat[];
 }
 

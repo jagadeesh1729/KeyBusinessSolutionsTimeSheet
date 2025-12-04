@@ -42,6 +42,10 @@ export const timesheetAPI = {
   // PM - Get pending timesheets
   getPendingTimesheets: () => 
     apiClient.get('/timesheets/manager/pending'),
+
+  // PM - Get timesheets by status (pending | approved | rejected)
+  getManagerTimesheetsByStatus: (status: 'pending' | 'approved' | 'rejected') =>
+    apiClient.get(`/timesheets/manager/status/${status}`),
   
   // PM - Approve timesheet
   approveTimesheet: (id: number, notes?: string) => 
@@ -54,6 +58,10 @@ export const timesheetAPI = {
   // PM - Reject timesheet
   rejectTimesheet: (id: number, reason: string) => 
     apiClient.post(`/timesheets/${id}/reject`, { reason }),
+
+  // Admin - Get timesheets by status (global)
+  getAdminTimesheetsByStatus: (status: 'pending' | 'approved' | 'rejected') =>
+    apiClient.get(`/timesheets/admin/status/${status}`),
   
   // PM - Get manager stats
   getPMStats: () => 
@@ -71,9 +79,27 @@ export const timesheetAPI = {
   getEmployeesNotSubmitted: () => 
     apiClient.get('/timesheets/manager/not-submitted'),
   
-  // Admin - Get dashboard stats
-  getDashboardStats: (range: string = 'current') => 
-    apiClient.get(`/dashboard/timesheet-stats?range=${range}`),
+  // Admin/PM - Get dashboard stats with optional explicit dates
+  getDashboardStats: (params: { range?: string; startDate?: string; endDate?: string } = { range: 'current' }) => {
+    const q = new URLSearchParams();
+    if (params.range) q.set('range', params.range);
+    if (params.startDate) q.set('startDate', params.startDate);
+    if (params.endDate) q.set('endDate', params.endDate);
+    const qs = q.toString();
+    return apiClient.get(`/dashboard/timesheet-stats${qs ? `?${qs}` : ''}`);
+  },
+
+  // Admin/PM - Get detailed lists for dashboard or per-project breakdown
+  getTimesheetDetails: (params: { status?: string; projectId?: number; range?: string; startDate?: string; endDate?: string }) => {
+    const q = new URLSearchParams();
+    if (params.status) q.set('status', params.status);
+    if (params.projectId !== undefined) q.set('projectId', String(params.projectId));
+    if (params.range) q.set('range', params.range);
+    if (params.startDate) q.set('startDate', params.startDate);
+    if (params.endDate) q.set('endDate', params.endDate);
+    const qs = q.toString();
+    return apiClient.get(`/dashboard/timesheet-details${qs ? `?${qs}` : ''}`);
+  },
 };
 
 // Project service

@@ -47,7 +47,7 @@ const TimesheetDetailModal = ({ open, onClose, timesheet }: TimesheetDetailModal
               </TableRow>
             </TableHead>
             <TableBody>
-              {timesheet.entries.flatMap(entry => entry.tasks.map((task, index) => (
+              {(timesheet.entries ?? timesheet.dailyEntries ?? []).flatMap(entry => entry.tasks.map((task, index) => (
                 <TableRow key={`${entry.date}-${index}`}>
                   <TableCell>{new Date(entry.date).toLocaleDateString()}</TableCell>
                   <TableCell>{task.name}</TableCell>

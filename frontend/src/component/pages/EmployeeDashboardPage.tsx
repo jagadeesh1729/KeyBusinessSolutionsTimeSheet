@@ -3,46 +3,45 @@ import {
   Box,
   Paper,
   Typography,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Chip,
-  Card,
-  CardContent,
-  CardActions,
-  IconButton,
-  Grid,
   CircularProgress,
-  Alert,
-  Tooltip,
-  Tabs,
-  Tab,
+  List,
+  ListItem,
+  ListItemButton,
+  ListItemIcon,
+  ListItemText,
+  Divider,
+  Avatar,
+  Stack,
+  useTheme,
+  useMediaQuery,
+  IconButton,
+  Drawer,
 } from '@mui/material';
-import VisibilityIcon from '@mui/icons-material/Visibility';
 import DashboardIcon from '@mui/icons-material/Dashboard';
 import EditCalendarIcon from '@mui/icons-material/EditCalendar';
 import DraftsIcon from '@mui/icons-material/Drafts';
 import HistoryIcon from '@mui/icons-material/History';
-import AccountCircleIcon from '@mui/icons-material/AccountCircle'; // This was causing an error as tabIndex was not defined
-import { Link as RouterLink, Outlet, useLocation } from 'react-router-dom';
-import ButtonComp from '../atoms/Button';
+import AccountCircleIcon from '@mui/icons-material/AccountCircle';
+import MenuIcon from '@mui/icons-material/Menu';
+import LogoutIcon from '@mui/icons-material/Logout';
+import { Link as RouterLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import type { Timesheet } from '../types/Holiday';
 import EmployeeProfileView from '../mocules/EmployeeProfileView';
 import TimesheetDetailModal from '../mocules/TimesheetDetailModal';
-import TimesheetEntry from './UserTimesheetEntry';
-import TimesheetHistory from './TimesheetHistory';
-import PreviousDrafts from './PreviousDrafts';
 import { useAuth } from '../../context/AuthContext';
 import apiClient from '../../api/apiClient';
 import type Employee from '../types/employee';
 import { useEmployeeTimesheets } from '../hooks/useEmployeeTimesheets';
 
+const DRAWER_WIDTH = 280;
+
 const EmployeeDashboardPage = () => {
-  const { user } = useAuth();
-  const { timesheets: recentTimesheets, loading: timesheetsLoading, error: timesheetsError } = useEmployeeTimesheets();
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  const [mobileOpen, setMobileOpen] = useState(false);
+
   const [employeeProfile, setEmployeeProfile] = useState<Employee | null>(null);
   const [profileLoading, setProfileLoading] = useState(true);
   const [selectedTimesheet, setSelectedTimesheet] = useState<Timesheet | null>(null);
@@ -54,10 +53,8 @@ const EmployeeDashboardPage = () => {
       if (user?.userId) {
         try {
           setProfileLoading(true);
-          // The /users endpoint is protected. Use the /auth/profile endpoint instead.
-          const response = await apiClient.get(`/auth/profile`); // This endpoint should return the logged-in user's profile
+          const response = await apiClient.get(`/auth/profile`);
           const profileData = response.data?.data?.user || response.data?.user || response.data;
-          console.log("Fetched profile data:", profileData);
           if (profileData) {
             setEmployeeProfile(profileData);
           }
@@ -71,9 +68,8 @@ const EmployeeDashboardPage = () => {
     fetchProfile();
   }, [user?.userId]);
 
-  const handleViewDetails = (timesheet: Timesheet) => {
-    setSelectedTimesheet(timesheet);
-    setIsModalOpen(true);
+  const handleDrawerToggle = () => {
+    setMobileOpen(!mobileOpen);
   };
 
   const handleCloseModal = () => {
@@ -81,60 +77,203 @@ const EmployeeDashboardPage = () => {
     setSelectedTimesheet(null);
   };
 
-  const tabValue = useMemo(() => {
-    const path = location.pathname;
-    if (path.includes('/employee/drafts')) return 1;
-    if (path.includes('/employee/history')) return 2;
-    if (path.includes('/employee/profile')) return 3;
-    // Default to current timesheet for /employee/timesheet and /employee/timesheet/edit/*
-    return 0;
-  }, [location.pathname]);
+  const handleLogout = () => {
+    logout();
+    navigate('/login');
+  };
 
-  // Special case for profile view, which is not a separate component in this layout
-  const isProfileTab = tabValue === 3;
-  const ProfileComponent = (
-    <EmployeeProfileView employee={employeeProfile} />
-  );
-  
-  return (
-    <Box sx={{ p: 3, bgcolor: 'grey.100', minHeight: '100vh' }}>
-      <Box sx={{ display: 'flex', height: 'calc(100vh - 48px)' }}>
-        {/* Sidebar Navigation */}
-        <Tabs
-          orientation="vertical"
-          variant="scrollable"
-          value={tabValue}
-          aria-label="Employee dashboard vertical tabs"
-          sx={{
-            borderRight: 1, borderColor: 'divider', minWidth: 260, bgcolor: 'background.paper',
-            boxShadow: 3, borderRadius: 2, p: 1,
-            '& .MuiTabs-indicator': { left: 0, width: '4px', borderRadius: '4px' },
+  const menuItems = [
+    { text: 'Current Timesheet', icon: <EditCalendarIcon />, path: '/employee/timesheet' },
+    { text: 'Pending Timesheets', icon: <DraftsIcon />, path: '/employee/drafts' },
+    { text: 'Past Timesheets', icon: <HistoryIcon />, path: '/employee/history' },
+    { text: 'My Profile', icon: <AccountCircleIcon />, path: '/employee/profile' },
+  ];
+
+  const isProfileTab = location.pathname.includes('/employee/profile');
+
+  const drawerContent = (
+    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', color: 'white' }}>
+      {/* Logo Area */}
+      <Box sx={{ p: 3, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <img 
+          src="/white_logo.png" 
+          alt="Key Business Solutions" 
+          style={{ height: 50, width: 'auto', maxWidth: '100%' }} 
+        />
+      </Box>
+
+      <Divider sx={{ borderColor: 'rgba(255,255,255,0.1)' }} />
+
+      {/* Navigation */}
+      <List sx={{ px: 2, py: 2, flexGrow: 1 }}>
+        {menuItems.map((item) => {
+          const isActive = location.pathname.includes(item.path) || (item.path === '/employee/timesheet' && location.pathname === '/employee');
+          return (
+            <ListItem key={item.text} disablePadding sx={{ mb: 1 }}>
+              <ListItemButton
+                component={RouterLink}
+                to={item.path}
+                selected={isActive}
+                onClick={() => isMobile && setMobileOpen(false)}
+                sx={{
+                  borderRadius: 2,
+                  py: 1.5,
+                  color: 'rgba(255,255,255,0.7)',
+                  '&.Mui-selected': {
+                    bgcolor: 'rgba(255,255,255,0.15)',
+                    color: 'white',
+                    '&:hover': { bgcolor: 'rgba(255,255,255,0.25)' },
+                    '& .MuiListItemIcon-root': { color: '#4fc3f7' },
+                  },
+                  '&:hover': {
+                    bgcolor: 'rgba(255,255,255,0.05)',
+                    color: 'white',
+                  },
+                }}
+              >
+                <ListItemIcon sx={{ color: isActive ? '#4fc3f7' : 'rgba(255,255,255,0.5)', minWidth: 40 }}>
+                  {item.icon}
+                </ListItemIcon>
+                <ListItemText 
+                  primary={item.text} 
+                  primaryTypographyProps={{ fontSize: '0.95rem', fontWeight: isActive ? 600 : 400 }} 
+                />
+              </ListItemButton>
+            </ListItem>
+          );
+        })}
+      </List>
+
+      <Divider sx={{ borderColor: 'rgba(255,255,255,0.1)' }} />
+
+      {/* User Profile Summary */}
+      <Box sx={{ p: 3 }}>
+        <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 2 }}>
+          <Avatar sx={{ bgcolor: '#4fc3f7', color: '#004e7c', fontWeight: 'bold' }}>
+            {user?.first_name?.[0]}{user?.last_name?.[0]}
+          </Avatar>
+          <Box sx={{ overflow: 'hidden' }}>
+            <Typography variant="subtitle2" noWrap fontWeight="bold">
+              {user?.first_name} {user?.last_name}
+            </Typography>
+            <Typography variant="caption" display="block" noWrap sx={{ opacity: 0.7 }}>
+              {user?.email}
+            </Typography>
+          </Box>
+        </Stack>
+        <ListItemButton 
+          onClick={handleLogout}
+          sx={{ 
+            borderRadius: 2, 
+            color: '#ffcdd2', 
+            '&:hover': { bgcolor: 'rgba(255, 0, 0, 0.1)' } 
           }}
         >
-          <Tab icon={<EditCalendarIcon />} iconPosition="start" label="Current Timesheet" sx={{ justifyContent: 'flex-start', mb: 1 }} component={RouterLink} to="/employee/timesheet" />
-          <Tab icon={<DraftsIcon />} iconPosition="start" label="Drafts" sx={{ justifyContent: 'flex-start', mb: 1 }} component={RouterLink} to="/employee/drafts" />
-          <Tab icon={<HistoryIcon />} iconPosition="start" label="Timesheet History" sx={{ justifyContent: 'flex-start', mb: 1 }} component={RouterLink} to="/employee/history" />
-          <Tab icon={<AccountCircleIcon />} iconPosition="start" label="My Profile" sx={{ justifyContent: 'flex-start', mb: 1 }} component={RouterLink} to="/employee/profile" />
-        </Tabs>
-
-        {/* Main Content Area */}
-        <Box sx={{ flexGrow: 1, ml: 3 }}>
-          <Box sx={{ bgcolor: 'background.paper', borderRadius: 2, boxShadow: 3, height: '100%', overflow: 'auto' }}>
-            {isProfileTab ? (
-              <Box sx={{ p: 3 }}>
-              <Typography variant="h4" component="h1" fontWeight="bold" color="text.primary" gutterBottom>
-                My Profile
-              </Typography>
-              <Paper sx={{ p: 4, mt: 2, boxShadow: 'none', border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
-                {profileLoading ? <CircularProgress /> : <EmployeeProfileView employee={employeeProfile} />}
-              </Paper>
-              </Box>
-            ) : (
-              <Outlet />
-            )}
-          </Box>
-        </Box>
+          <ListItemIcon sx={{ color: '#ffcdd2', minWidth: 40 }}>
+            <LogoutIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText primary="Sign Out" primaryTypographyProps={{ fontSize: '0.9rem' }} />
+        </ListItemButton>
       </Box>
+    </Box>
+  );
+
+  return (
+    <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: '#f4f6f8' }}>
+      {/* Mobile Header */}
+      {isMobile && (
+        <Box
+          sx={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            height: 64,
+            bgcolor: 'white',
+            zIndex: 1100,
+            display: 'flex',
+            alignItems: 'center',
+            px: 2,
+            boxShadow: 1,
+          }}
+        >
+          <IconButton onClick={handleDrawerToggle} edge="start" sx={{ mr: 2 }}>
+            <MenuIcon />
+          </IconButton>
+          <img src="/KeyLogo.png" alt="Logo" style={{ height: 32 }} />
+        </Box>
+      )}
+
+      {/* Sidebar Drawer */}
+      <Box
+        component="nav"
+        sx={{ width: { md: DRAWER_WIDTH }, flexShrink: { md: 0 } }}
+      >
+        {/* Mobile Drawer */}
+        <Drawer
+          variant="temporary"
+          open={mobileOpen}
+          onClose={handleDrawerToggle}
+          ModalProps={{ keepMounted: true }}
+          sx={{
+            display: { xs: 'block', md: 'none' },
+            '& .MuiDrawer-paper': { 
+              boxSizing: 'border-box', 
+              width: DRAWER_WIDTH,
+              background: 'linear-gradient(180deg, #0066A4 0%, #004e7c 100%)',
+            },
+          }}
+        >
+          {drawerContent}
+        </Drawer>
+
+        {/* Desktop Drawer */}
+        <Drawer
+          variant="permanent"
+          sx={{
+            display: { xs: 'none', md: 'block' },
+            '& .MuiDrawer-paper': { 
+              boxSizing: 'border-box', 
+              width: DRAWER_WIDTH,
+              background: 'linear-gradient(180deg, #0066A4 0%, #004e7c 100%)',
+              borderRight: 'none',
+              boxShadow: '4px 0 24px rgba(0,0,0,0.05)'
+            },
+          }}
+          open
+        >
+          {drawerContent}
+        </Drawer>
+      </Box>
+
+      {/* Main Content */}
+      <Box
+        component="main"
+        sx={{
+          flexGrow: 1,
+          p: { xs: 2, md: 4 },
+          width: { md: `calc(100% - ${DRAWER_WIDTH}px)` },
+          mt: { xs: 8, md: 0 },
+          overflowX: 'hidden'
+        }}
+      >
+        {isProfileTab ? (
+          <Box>
+            <Paper elevation={0} sx={{ p: 0, bgcolor: 'transparent' }}>
+              {profileLoading ? (
+                <Box sx={{ display: 'flex', justifyContent: 'center', p: 5 }}>
+                  <CircularProgress />
+                </Box>
+              ) : (
+                <EmployeeProfileView employee={employeeProfile} />
+              )}
+            </Paper>
+          </Box>
+        ) : (
+          <Outlet />
+        )}
+      </Box>
+
       <TimesheetDetailModal open={isModalOpen} onClose={handleCloseModal} timesheet={selectedTimesheet} />
     </Box>
   );

@@ -9,6 +9,9 @@ export interface Project {
   end_date: Date | null;
   auto_approve: boolean;
   period_type: PeriodType;
+  code?: string;
+  client_address?: string | null;
+  project_description?: string | null;
   created_at: Date;
   updated_at: Date;
 }
@@ -19,6 +22,9 @@ export interface CreateProjectRequest {
   end_date?: string;
   auto_approve?: boolean;
   period_type?: PeriodType;
+  code?: string;
+  client_address?: string;
+  project_description?: string;
 }
 
 export interface UpdateProjectRequest {
@@ -28,6 +34,11 @@ export interface UpdateProjectRequest {
   end_date?: string;
   auto_approve?: boolean;
   period_type?: PeriodType;
+  // Allow optional updates
+  client_address?: string;
+  project_description?: string;
+  // Generally we do not update code, but keep optional for flexibility
+  code?: string;
 }
 // src/types/UserProject.ts
 

@@ -6,15 +6,18 @@ const Layout = () => {
   const location = useLocation();
 
   // Hide layout for login/signup pages
-  const noLayoutRoutes = ['/signup'];
+  const noLayoutRoutes = ['/signup', '/login'];
   if (noLayoutRoutes.includes(location.pathname)) {
     return <Outlet />;
   }
 
+  // Hide Header for Employee Dashboard and Admin Dashboard as they have their own sidebars
+  const shouldHideHeader = location.pathname.startsWith('/employee') || location.pathname.startsWith('/admin');
+
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
       {/* Header can be added here if you have one */}
-      <Header />
+      {!shouldHideHeader && <Header />}
 
       {/* Main Content Area */}
       <Box

@@ -2,7 +2,8 @@ import React from 'react';
 import {
   Container,
   Typography,
-  Paper,
+  Card,
+  CardContent,
   Button,
   Chip,
   Alert,
@@ -12,18 +13,20 @@ import {
   TableRow,
   TableCell,
   TableBody,
-  IconButton,
-  Tooltip,
   CircularProgress,
   Box,
+  Stack,
+  useTheme,
+  alpha,
 } from '@mui/material';
-import { Edit, Inbox } from '@mui/icons-material';
+import { Edit, Inbox, ArrowForward } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { useDraftTimesheets } from '../hooks/useTimesheet';
 import type { Timesheet } from '../types/Holiday';
 
 const PreviousDrafts: React.FC = () => {
   const navigate = useNavigate();
+  const theme = useTheme();
   const { data: drafts, loading, error } = useDraftTimesheets();
 
   const formatDate = (dateStr: string) => {
@@ -41,77 +44,142 @@ const PreviousDrafts: React.FC = () => {
 
   if (loading) {
     return (
-      <Box display="flex" justifyContent="center" alignItems="center" sx={{ p: 4 }}>
-        <CircularProgress />
-        <Typography sx={{ ml: 2 }}>Loading previous drafts...</Typography>
+      <Box display="flex" justifyContent="center" alignItems="center" minHeight="60vh">
+        <CircularProgress size={40} thickness={4} />
+        <Typography sx={{ ml: 2, color: 'text.secondary', fontWeight: 500 }}>
+          Loading drafts...
+        </Typography>
       </Box>
     );
   }
 
   return (
-    <Container maxWidth="xl" className="py-8">
-      <Typography variant="h4" className="font-bold text-gray-900 mb-4">
-        Unsubmitted Drafts
-      </Typography>
+    <Container maxWidth="xl" sx={{ py: 4 }}>
+      <Stack spacing={4}>
+        {/* Header Section */}
+        <Box>
+          <Typography variant="h4" sx={{ fontWeight: 700, color: 'text.primary', mb: 1 }}>
+            Pending Timesheets
+          </Typography>
+          <Typography variant="body1" color="text.secondary">
+            Review and complete your saved timesheets.
+          </Typography>
+        </Box>
 
-      <Alert severity="info" className="mb-6">
-        This page lists timesheets from previous periods that were saved as a draft but never submitted. Please complete and submit them.
-      </Alert>
+        {error && (
+          <Alert severity="error" sx={{ borderRadius: 2 }}>
+            {error}
+          </Alert>
+        )}
 
-      {error && <Alert severity="error" className="mb-4">{error}</Alert>}
-
-      <Paper elevation={3} sx={{ p: 2 }}>
-        <TableContainer>
-          <Table sx={{ minWidth: 650 }} aria-label="draft timesheets table">
-            <TableHead>
-              <TableRow sx={{ '& th': { fontWeight: 'bold' } }}>
-                <TableCell>Project</TableCell>
-                <TableCell>Period</TableCell>
-                <TableCell align="right">Total Hours</TableCell>
-                <TableCell align="center">Status</TableCell>
-                <TableCell align="center">Actions</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {drafts && drafts.length > 0 ? (
-                drafts.map((draft) => (
-                  <TableRow key={draft.id} hover>
-                    <TableCell component="th" scope="row">
-                      {draft.project?.name || 'Unknown Project'}
-                    </TableCell>
-                    <TableCell>{formatDate(draft.periodStart)} - {formatDate(draft.periodEnd)}</TableCell>
-                    <TableCell align="right">{draft.totalHours || '0.00'}</TableCell>
-                    <TableCell align="center">
-                      <Chip label="DRAFT" color="warning" size="small" variant="outlined" />
-                    </TableCell>
-                    <TableCell align="center">
-                      <Tooltip title="Edit and Submit Draft">
-                        <Button
-                          variant="contained"
-                          startIcon={<Edit />}
-                          onClick={() => handleEditDraft(draft)}
-                          size="small"
-                        >
-                          Complete
-                        </Button>
-                      </Tooltip>
-                    </TableCell>
-                  </TableRow>
-                ))
-              ) : (
-                <TableRow>
-                  <TableCell colSpan={5} align="center">
-                    <Box sx={{ p: 4, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
-                      <Inbox sx={{ fontSize: 48, color: 'grey.400' }} />
-                      <Typography variant="h6" color="textSecondary">No unsubmitted drafts found.</Typography>
-                    </Box>
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </TableContainer>
-      </Paper>
+        <Card 
+          elevation={0} 
+          sx={{ 
+            borderRadius: 3, 
+            border: '1px solid', 
+            borderColor: 'divider',
+            overflow: 'hidden'
+          }}
+        >
+          <CardContent sx={{ p: 0 }}>
+            {drafts && drafts.length > 0 ? (
+              <TableContainer>
+                <Table sx={{ minWidth: 650 }}>
+                  <TableHead sx={{ bgcolor: alpha(theme.palette.primary.main, 0.04) }}>
+                    <TableRow>
+                      <TableCell sx={{ fontWeight: 600, py: 2 }}>Project</TableCell>
+                      <TableCell sx={{ fontWeight: 600, py: 2 }}>Period</TableCell>
+                      <TableCell align="right" sx={{ fontWeight: 600, py: 2 }}>Total Hours</TableCell>
+                      <TableCell align="center" sx={{ fontWeight: 600, py: 2 }}>Status</TableCell>
+                      <TableCell align="center" sx={{ fontWeight: 600, py: 2 }}>Actions</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {drafts.map((draft) => (
+                      <TableRow 
+                        key={draft.id} 
+                        hover
+                        sx={{ '&:last-child td, &:last-child th': { border: 0 } }}
+                      >
+                        <TableCell component="th" scope="row" sx={{ fontWeight: 500 }}>
+                          {draft.project?.name || 'Unknown Project'}
+                        </TableCell>
+                        <TableCell sx={{ color: 'text.secondary' }}>
+                          {formatDate(draft.periodStart)} — {formatDate(draft.periodEnd)}
+                        </TableCell>
+                        <TableCell align="right" sx={{ fontWeight: 600 }}>
+                          {draft.totalHours || '0.00'}
+                        </TableCell>
+                        <TableCell align="center">
+                          <Chip 
+                            label="DRAFT" 
+                            color="warning" 
+                            size="small" 
+                            variant="outlined" 
+                            sx={{ fontWeight: 600, borderRadius: 1.5 }}
+                          />
+                        </TableCell>
+                        <TableCell align="center">
+                          <Button
+                            variant="contained"
+                            size="small"
+                            startIcon={<Edit />}
+                            onClick={() => handleEditDraft(draft)}
+                            sx={{ 
+                              textTransform: 'none', 
+                              borderRadius: 2,
+                              boxShadow: 'none',
+                              '&:hover': { boxShadow: 'none' }
+                            }}
+                          >
+                            Complete
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            ) : (
+              <Box 
+                sx={{ 
+                  p: 8, 
+                  display: 'flex', 
+                  flexDirection: 'column', 
+                  alignItems: 'center', 
+                  gap: 2,
+                  bgcolor: 'background.paper'
+                }}
+              >
+                <Box 
+                  sx={{ 
+                    p: 3, 
+                    borderRadius: '50%', 
+                    bgcolor: alpha(theme.palette.primary.main, 0.05),
+                    color: 'primary.main'
+                  }}
+                >
+                  <Inbox sx={{ fontSize: 48 }} />
+                </Box>
+                <Typography variant="h6" color="text.primary" fontWeight={600}>
+                  No drafts found
+                </Typography>
+                <Typography variant="body2" color="text.secondary" align="center" maxWidth={400}>
+                  You don't have any unsubmitted timesheets. Start a new one from the dashboard.
+                </Typography>
+                <Button 
+                  variant="outlined" 
+                  endIcon={<ArrowForward />}
+                  onClick={() => navigate('/employee/timesheet')}
+                  sx={{ mt: 2, borderRadius: 2, textTransform: 'none' }}
+                >
+                  Create New Timesheet
+                </Button>
+              </Box>
+            )}
+          </CardContent>
+        </Card>
+      </Stack>
     </Container>
   );
 };

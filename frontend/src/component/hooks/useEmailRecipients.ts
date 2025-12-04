@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import apiClient from '../../api/apiClient';
 
 interface Recipient {
@@ -9,7 +9,8 @@ interface Recipient {
 }
 
 export const useEmailRecipients = () => {
-  const [users, setUsers] = useState<Recipient[]>([]);
+  const [projectManagers, setProjectManagers] = useState<Recipient[]>([]);
+  const [employees, setEmployees] = useState<Recipient[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -18,8 +19,35 @@ export const useEmailRecipients = () => {
       try {
         setLoading(true);
         setError(null);
-        const response = await apiClient.get('/auth/users'); // This endpoint returns all users for an admin
-        setUsers(response.data.data || []);
+        const [pmResponse, usersResponse] = await Promise.all([
+          apiClient.get('/users/pms'),      // Dedicated PM list
+          apiClient.get('/auth/users'),     // Full user list (admin/PM scoped)
+        ]);
+
+        // Normalize project managers
+        const pmData = Array.isArray(pmResponse.data?.users) ? pmResponse.data.users : [];
+        const normalizedPMs: Recipient[] = pmData
+          .filter((pm: any) => pm?.email)
+          .map((pm: any) => ({
+            id: pm.id,
+            name: (pm.name || `${pm.first_name ?? ''} ${pm.last_name ?? ''}`).trim() || pm.email,
+            email: pm.email,
+            role: 'project_manager',
+          }));
+
+        // Normalize employees from the full user list
+        const allUsers = Array.isArray(usersResponse.data?.data) ? usersResponse.data.data : [];
+        const normalizedEmployees: Recipient[] = allUsers
+          .filter((user: any) => user?.role === 'employee' && user?.email)
+          .map((user: any) => ({
+            id: user.id,
+            name: (user.name || `${user.first_name ?? ''} ${user.last_name ?? ''}`).trim() || user.email,
+            email: user.email,
+            role: 'employee',
+          }));
+
+        setProjectManagers(normalizedPMs);
+        setEmployees(normalizedEmployees);
       } catch (err: any) {
         setError(err.response?.data?.message || 'Failed to fetch users.');
       } finally {
@@ -29,14 +57,6 @@ export const useEmailRecipients = () => {
 
     fetchUsers();
   }, []);
-
-  const projectManagers = useMemo(() => {
-    return users.filter(user => user.role === 'project_manager');
-  }, [users]);
-
-  const employees = useMemo(() => {
-    return users.filter(user => user.role === 'employee');
-  }, [users]);
 
   return { projectManagers, employees, loading, error };
 };

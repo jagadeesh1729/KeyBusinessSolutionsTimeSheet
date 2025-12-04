@@ -10,6 +10,7 @@ type ManagerFormData = Omit<ProductManager, 'id' | 'employees' | 'project'> & {
 
 export const useProjectManagers = () => {
   const [managers, setManagers] = useState<ProductManager[]>([]);
+  const [inactiveManagers, setInactiveManagers] = useState<ProductManager[]>([]);
   const [availableProjects, setAvailableProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -18,12 +19,14 @@ export const useProjectManagers = () => {
   const [editingManager, setEditingManager] = useState<ProductManager | null>(null);
   const [formData, setFormData] = useState<Partial<ManagerFormData>>({});
 
+
   const fetchManagersAndProjects = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
-      const [pmsResponse, projectsResponse] = await Promise.all([
+      const [pmsResponse, inactivePmsResponse, projectsResponse] = await Promise.all([
         apiClient.get('/users/pms'),
+        apiClient.get('/users/pms/inactive'),
         apiClient.get('/projects/'), // This gets all available projects
       ]);
       
@@ -36,15 +39,48 @@ export const useProjectManagers = () => {
           const assignedProjects = userProjectsResponse.data?.projects || [];
           return {
             id: user.id,
-            first_name: user.name.split(' ')[0] || '',
-            last_name: user.name.split(' ').slice(1).join(' ') || '',
+            first_name: user.first_name ?? (user.name ? user.name.split(' ')[0] : ''),
+            last_name: user.last_name ?? (user.name ? user.name.split(' ').slice(1).join(' ') : ''),
             email: user.email,
             phone: user.phone,
+            is_active: user.is_active,
             project: assignedProjects,
             employees: [],
           };
         }));
         setManagers(managersWithProjects);
+      }
+
+      // Process inactive managers
+      if (inactivePmsResponse.data && Array.isArray(inactivePmsResponse.data.users)) {
+        const inactiveManagersWithProjects = await Promise.all(inactivePmsResponse.data.users.map(async (user: any) => {
+          try {
+            const userProjectsResponse = await apiClient.get(`/users/${user.id}/projects`);
+            const assignedProjects = userProjectsResponse.data?.projects || [];
+            return {
+              id: user.id,
+              first_name: user.first_name ?? (user.name ? user.name.split(' ')[0] : ''),
+              last_name: user.last_name ?? (user.name ? user.name.split(' ').slice(1).join(' ') : ''),
+              email: user.email,
+              phone: user.phone,
+              is_active: user.is_active,
+              project: assignedProjects,
+              employees: [],
+            };
+          } catch {
+            return {
+              id: user.id,
+              first_name: user.first_name ?? (user.name ? user.name.split(' ')[0] : ''),
+              last_name: user.last_name ?? (user.name ? user.name.split(' ').slice(1).join(' ') : ''),
+              email: user.email,
+              phone: user.phone,
+              is_active: user.is_active,
+              project: [],
+              employees: [],
+            };
+          }
+        }));
+        setInactiveManagers(inactiveManagersWithProjects);
       }
     } catch (err: any) {
       setError(err.response?.data?.message || 'Failed to fetch data.');
@@ -76,7 +112,21 @@ export const useProjectManagers = () => {
   };
 
   const handleFormChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFormData((prev) => ({ ...prev, [e.target.name]: e.target.value }));
+    const { name, value } = e.target;
+    setFormData((prev) => ({ ...prev, [name]: value }));
+  };
+
+  // Duplicate existing PM data into create flow
+  const handleDuplicate = (manager: ProductManager) => {
+    setEditingManager(null);
+    setFormData({
+      first_name: manager.first_name,
+      last_name: manager.last_name,
+      email: manager.email,
+      phone: manager.phone,
+      project_ids: manager.project?.map(p => p.id) || [],
+    });
+    setIsModalOpen(true);
   };
 
   const handleProjectSelection = (event: SelectChangeEvent<number[]>) => {
@@ -87,9 +137,10 @@ export const useProjectManagers = () => {
   const handleSave = async () => {
     try {
       const userPayload = {
-        name: `${formData.first_name} ${formData.last_name}`.trim(),
+        first_name: formData.first_name,
+        last_name: formData.last_name,
         email: formData.email,
-        phone: formData.phone,
+        phone: String(formData.phone || '').replace(/\D/g, ''),
         location: 'Default Location', // Add fields as necessary
         no_of_hours: 40, // Add fields as necessary
       };
@@ -115,8 +166,31 @@ export const useProjectManagers = () => {
     }
   };
 
+  const handleDeactivate = async (id: number) => {
+    if (window.confirm('Are you sure you want to deactivate this project manager?')) {
+      try {
+        await apiClient.delete(`/users/${id}`);
+        fetchManagersAndProjects(); // Refresh the list
+      } catch (err: any) {
+        setError(err.response?.data?.message || 'Failed to deactivate project manager.');
+      }
+    }
+  };
+
+  const handleReactivate = async (id: number) => {
+    if (window.confirm('Are you sure you want to reactivate this project manager?')) {
+      try {
+        await apiClient.put(`/users/${id}/reactivate`);
+        fetchManagersAndProjects(); // Refresh the list
+      } catch (err: any) {
+        setError(err.response?.data?.message || 'Failed to reactivate project manager.');
+      }
+    }
+  };
+
   return {
     managers,
+    inactiveManagers,
     availableProjects,
     loading,
     error,
@@ -124,9 +198,12 @@ export const useProjectManagers = () => {
     editingManager,
     formData,
     handleOpenModal,
+    handleDuplicate,
     handleCloseModal,
     handleFormChange,
     handleProjectSelection,
     handleSave,
+    handleDeactivate,
+    handleReactivate,
   };
 };

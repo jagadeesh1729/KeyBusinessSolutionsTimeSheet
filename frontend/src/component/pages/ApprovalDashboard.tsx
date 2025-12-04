@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import {
-  Container,
   Typography,
   Paper,
   Table,
@@ -18,14 +17,10 @@ import {
   TextField,
   Box,
   Alert,
-  Card,
-  CardContent,
   CircularProgress,
   Avatar,
   Tooltip,
   IconButton,
-  Badge,
-  Fab,
   Divider,
 } from '@mui/material';
 import { 
@@ -41,9 +36,8 @@ import {
   ErrorOutline,
   HourglassEmpty,
   Refresh,
-  FilterList,
 } from '@mui/icons-material';
-import { usePendingTimesheets, useTimesheetMutations, usePMStats } from '../hooks/useTimesheet';
+import { useTimesheetMutations, usePMStats, useManagerTimesheetsByStatus } from '../hooks/useTimesheet';
 import { timesheetAPI } from '../../api/timesheetapi';
 import type { Timesheet } from '../types/Holiday';
 
@@ -82,6 +76,13 @@ const STATUS_CONFIG = {
     bgColor: 'rgb(254, 226, 226)',
     textColor: 'rgb(185, 28, 28)',
   },
+  'not-submitted': {
+    color: 'default' as const,
+    icon: <HourglassEmpty fontSize="small" />, 
+    label: 'Not Submitted',
+    bgColor: 'rgb(243, 244, 246)',
+    textColor: 'rgb(31, 41, 55)',
+  },
 } as const;
 
 // Priority levels for hours
@@ -103,7 +104,9 @@ const ApprovalDashboard: React.FC = () => {
   const [notSubmittedData, setNotSubmittedData] = useState<any[]>([]);
 
   // Hooks
-  const { data: timesheets, loading, error, refetch } = usePendingTimesheets();
+  const [selectedStatus, setSelectedStatus] = useState<'pending' | 'approved' | 'rejected' | 'not-submitted'>('pending');
+  const normalizedStatus: 'pending' | 'approved' | 'rejected' = selectedStatus === 'not-submitted' ? 'pending' : selectedStatus;
+  const { data: timesheets, loading, error, refetch } = useManagerTimesheetsByStatus(normalizedStatus);
   const { data: pmStats } = usePMStats();
   const { approveTimesheet, rejectTimesheet, loading: mutationLoading, error: mutationError } = useTimesheetMutations();
 
@@ -112,7 +115,7 @@ const ApprovalDashboard: React.FC = () => {
     const enhancedTimesheets = (timesheets as EnhancedTimesheet[]) || [];
     
     return {
-      pending: enhancedTimesheets.filter(ts => ts.status === 'pending').length,
+      pending: pmStats.pending,
       employees: pmStats.employees,
       projects: pmStats.projects,
       avgHoursPerTimesheet: enhancedTimesheets.length > 0 
@@ -131,6 +134,42 @@ const ApprovalDashboard: React.FC = () => {
       return () => clearTimeout(timer);
     }
   }, [mutationError]);
+
+  // Fetch not-submitted list when selected
+  useEffect(() => {
+    const fetchNotSubmitted = async () => {
+      try {
+        console.log('Fetching not-submitted employees...');
+        const response = await timesheetAPI.getEmployeesNotSubmitted();
+        console.log('Not-submitted API response:', response.data);
+        if (response.data.success) {
+          // Transform snake_case from backend to match expected structure
+          const transformed = (response.data.employees || []).map((emp: any) => ({
+            ...emp,
+            // Map to consistent field names used in the table
+            periodStart: emp.period_start,
+            periodEnd: emp.period_end,
+            totalHours: emp.total_hours || 0,
+            submittedAt: emp.submitted_at,
+            dailyEntries: emp.daily_entries?.entries || emp.daily_entries || [],
+            // Keep the composite id for unique key
+            id: emp.id || `${emp.employee_id}-${emp.project_id}`,
+          }));
+          console.log('Transformed not-submitted data:', transformed);
+          setNotSubmittedData(transformed);
+        } else {
+          console.log('API returned success=false');
+          setNotSubmittedData([]);
+        }
+      } catch (e) {
+        console.error('Error fetching not-submitted:', e);
+        setNotSubmittedData([]);
+      }
+    };
+    if (selectedStatus === 'not-submitted') {
+      fetchNotSubmitted();
+    }
+  }, [selectedStatus]);
 
   // Handlers
   const handleApprove = async (timesheetId: number) => {
@@ -173,6 +212,11 @@ const ApprovalDashboard: React.FC = () => {
     } finally {
       setRefreshing(false);
     }
+  };
+
+  const setFilter = (status: 'pending' | 'approved' | 'rejected' | 'not-submitted') => {
+    setSelectedStatus(status);
+    // refetch will be triggered by hook effect on status
   };
 
   // Dialog handlers
@@ -261,327 +305,361 @@ const ApprovalDashboard: React.FC = () => {
   // Loading state
   if (loading) {
     return (
-      <Container maxWidth="xl" className="py-8">
-        <Box display="flex" flexDirection="column" alignItems="center" justifyContent="center" minHeight="60vh">
-          <CircularProgress size={64} className="mb-6" />
-          <Typography variant="h6" color="textSecondary" gutterBottom>
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="text-center">
+          <CircularProgress size={40} sx={{ color: '#0066A4' }} />
+          <Typography variant="body2" sx={{ mt: 2, color: 'text.secondary' }}>
             Loading approval dashboard...
           </Typography>
-          <Typography variant="body2" color="textSecondary">
-            Fetching pending timesheets from the server
-          </Typography>
-        </Box>
-      </Container>
+        </div>
+      </div>
     );
   }
 
   return (
-    <Container maxWidth="xl" className="py-8">
+    <div className="p-6 lg:p-8">
       {/* Header Section */}
-      <Box className="mb-8">
-        <Box className="flex justify-between items-start mb-4">
-          <div>
-            <Typography variant="h4" className="font-bold text-gray-900 mb-2">
-              📋 Timesheet Approval Dashboard
-            </Typography>
-            <Typography variant="body1" color="textSecondary">
-              Review and approve employee timesheets for projects requiring manual approval
-            </Typography>
+      <div className="mb-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-blue-50 rounded-lg">
+              <CheckCircleOutline sx={{ color: '#0066A4', fontSize: 28 }} />
+            </div>
+            <div>
+              <Typography variant="h5" sx={{ fontWeight: 600, color: '#1a1a2e' }}>
+                Timesheet Approvals
+              </Typography>
+              <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                Review and manage employee timesheets
+              </Typography>
+            </div>
           </div>
           
-          <Box className="flex gap-2">
-            <Tooltip title="Refresh data">
-              <IconButton
-                onClick={handleRefresh}
-                disabled={refreshing}
-                sx={{ 
-                  backgroundColor: 'primary.main',
-                  color: 'white',
-                  '&:hover': { backgroundColor: 'primary.dark' }
-                }}
-              >
-                {refreshing ? <CircularProgress size={20} /> : <Refresh />}
-              </IconButton>
-            </Tooltip>
-          </Box>
-        </Box>
-
-        {/* Quick Actions Bar */}
-       
-      </Box>
+          <Tooltip title="Refresh data">
+            <IconButton
+              onClick={handleRefresh}
+              disabled={refreshing}
+              sx={{ 
+                bgcolor: '#0066A4',
+                color: 'white',
+                '&:hover': { bgcolor: '#004e7c' },
+                '&:disabled': { bgcolor: '#94a3b8' }
+              }}
+            >
+              {refreshing ? <CircularProgress size={20} color="inherit" /> : <Refresh />}
+            </IconButton>
+          </Tooltip>
+        </div>
+      </div>
 
       {/* Alert Messages */}
       {message && (
         <Alert 
           severity={message.type} 
-          className="mb-6 shadow-sm" 
           onClose={() => setMessage(null)}
-          variant="filled"
-          sx={{ borderRadius: 2 }}
+          sx={{ mb: 4, borderRadius: 2 }}
         >
           {message.text}
         </Alert>
       )}
 
       {error && (
-        <Alert severity="error" className="mb-6 shadow-sm" variant="filled" sx={{ borderRadius: 2 }}>
-          ⚠️ {error}
+        <Alert severity="error" sx={{ mb: 4, borderRadius: 2 }}>
+          {error}
         </Alert>
       )}
 
-      {/* Enhanced Stats Dashboard */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 mb-8">
-        <div>
-          <Card className="h-full shadow-lg hover:shadow-xl transition-shadow duration-300">
-            <CardContent className="text-center">
-              <Box className="flex items-center justify-center mb-3">
-                <Badge badgeContent={stats.pending} color="warning" max={99}>
-                  <HourglassEmpty sx={{ fontSize: 48, color: '#d97706' }} />
-                </Badge>
-              </Box>
-              <Typography variant="h3" className="font-bold mb-2" sx={{ color: '#b45309' }}>
-                {stats.pending}
-              </Typography>
-              <Typography variant="body2" className="font-medium" sx={{ color: '#92400e' }}>
-                Pending Approvals
-              </Typography>
-            </CardContent>
-          </Card>
+      {/* Stats Cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        {/* Pending Card */}
+        <div 
+          onClick={() => setFilter('pending')}
+          className={`cursor-pointer rounded-xl border-2 p-4 transition-all hover:shadow-md ${
+            selectedStatus === 'pending' 
+              ? 'border-amber-400 bg-amber-50' 
+              : 'border-gray-200 bg-white hover:border-amber-200'
+          }`}
+        >
+          <div className="flex items-center justify-between mb-2">
+            <div className="p-2 bg-amber-100 rounded-lg">
+              <HourglassEmpty sx={{ color: '#d97706', fontSize: 20 }} />
+            </div>
+            {selectedStatus === 'pending' && (
+              <Chip label="Active" size="small" sx={{ bgcolor: '#fef3c7', color: '#92400e', fontSize: '0.7rem' }} />
+            )}
+          </div>
+          <Typography variant="h4" sx={{ fontWeight: 700, color: '#b45309', mb: 0.5 }}>
+            {stats.pending}
+          </Typography>
+          <Typography variant="body2" sx={{ color: '#92400e', fontWeight: 500 }}>
+            Pending
+          </Typography>
         </div>
 
-       
-       
-
-        <div>
-          <Card className="h-full shadow-lg hover:shadow-xl transition-shadow duration-300">
-            <CardContent className="text-center">
-              <CheckCircleOutline sx={{ fontSize: 40, color: '#059669', mb: 1 }} />
-              <Typography variant="h4" className="font-bold mb-1" sx={{ color: '#047857' }}>
-                {pmStats.approved}
-              </Typography>
-              <Typography variant="body2" className="font-medium" sx={{ color: '#065f46' }}>
-                Approved
-              </Typography>
-            </CardContent>
-          </Card>
+        {/* Approved Card */}
+        <div 
+          onClick={() => setFilter('approved')}
+          className={`cursor-pointer rounded-xl border-2 p-4 transition-all hover:shadow-md ${
+            selectedStatus === 'approved' 
+              ? 'border-green-400 bg-green-50' 
+              : 'border-gray-200 bg-white hover:border-green-200'
+          }`}
+        >
+          <div className="flex items-center justify-between mb-2">
+            <div className="p-2 bg-green-100 rounded-lg">
+              <CheckCircleOutline sx={{ color: '#059669', fontSize: 20 }} />
+            </div>
+            {selectedStatus === 'approved' && (
+              <Chip label="Active" size="small" sx={{ bgcolor: '#dcfce7', color: '#166534', fontSize: '0.7rem' }} />
+            )}
+          </div>
+          <Typography variant="h4" sx={{ fontWeight: 700, color: '#047857', mb: 0.5 }}>
+            {pmStats.approved}
+          </Typography>
+          <Typography variant="body2" sx={{ color: '#065f46', fontWeight: 500 }}>
+            Approved
+          </Typography>
         </div>
 
-        <div>
-          <Card className="h-full shadow-lg hover:shadow-xl transition-shadow duration-300">
-            <CardContent className="text-center">
-              <ErrorOutline sx={{ fontSize: 40, color: '#dc2626', mb: 1 }} />
-              <Typography variant="h4" className="font-bold mb-1" sx={{ color: '#dc2626' }}>
-                {pmStats.rejected}
-              </Typography>
-              <Typography variant="body2" className="font-medium" sx={{ color: '#991b1b' }}>
-                Rejected
-              </Typography>
-            </CardContent>
-          </Card>
+        {/* Rejected Card */}
+        <div 
+          onClick={() => setFilter('rejected')}
+          className={`cursor-pointer rounded-xl border-2 p-4 transition-all hover:shadow-md ${
+            selectedStatus === 'rejected' 
+              ? 'border-red-400 bg-red-50' 
+              : 'border-gray-200 bg-white hover:border-red-200'
+          }`}
+        >
+          <div className="flex items-center justify-between mb-2">
+            <div className="p-2 bg-red-100 rounded-lg">
+              <ErrorOutline sx={{ color: '#dc2626', fontSize: 20 }} />
+            </div>
+            {selectedStatus === 'rejected' && (
+              <Chip label="Active" size="small" sx={{ bgcolor: '#fee2e2', color: '#991b1b', fontSize: '0.7rem' }} />
+            )}
+          </div>
+          <Typography variant="h4" sx={{ fontWeight: 700, color: '#dc2626', mb: 0.5 }}>
+            {pmStats.rejected}
+          </Typography>
+          <Typography variant="body2" sx={{ color: '#991b1b', fontWeight: 500 }}>
+            Rejected
+          </Typography>
         </div>
 
-        <div>
-          <Card className="h-full shadow-lg hover:shadow-xl transition-shadow duration-300 cursor-pointer" onClick={handleNotSubmittedClick}>
-            <CardContent className="text-center">
-              <Schedule sx={{ fontSize: 40, color: '#f59e0b', mb: 1 }} />
-              <Typography variant="h4" className="font-bold mb-1" sx={{ color: '#d97706' }}>
-                {pmStats.notSubmitted}
-              </Typography>
-              <Typography variant="body2" className="font-medium" sx={{ color: '#92400e' }}>
-                Not Submitted
-              </Typography>
-            </CardContent>
-          </Card>
+        {/* Not Submitted Card */}
+        <div 
+          onClick={() => setFilter('not-submitted')}
+          className={`cursor-pointer rounded-xl border-2 p-4 transition-all hover:shadow-md ${
+            selectedStatus === 'not-submitted' 
+              ? 'border-orange-400 bg-orange-50' 
+              : 'border-gray-200 bg-white hover:border-orange-200'
+          }`}
+        >
+          <div className="flex items-center justify-between mb-2">
+            <div className="p-2 bg-orange-100 rounded-lg">
+              <Schedule sx={{ color: '#ea580c', fontSize: 20 }} />
+            </div>
+            {selectedStatus === 'not-submitted' && (
+              <Chip label="Active" size="small" sx={{ bgcolor: '#ffedd5', color: '#9a3412', fontSize: '0.7rem' }} />
+            )}
+          </div>
+          <Typography variant="h4" sx={{ fontWeight: 700, color: '#ea580c', mb: 0.5 }}>
+            {pmStats.notSubmitted}
+          </Typography>
+          <Typography variant="body2" sx={{ color: '#9a3412', fontWeight: 500 }}>
+            Not Submitted
+          </Typography>
         </div>
       </div>
 
-      {/* Enhanced Timesheets Table */}
-      <Paper elevation={3} sx={{ borderRadius: 2, overflow: 'hidden', mb: 4 }}>
-        <Box className="p-6 border-b border-gray-200" sx={{ background: 'linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%)' }}>
-          <Box className="flex justify-between items-center">
+      {/* Timesheets Table */}
+      <Paper 
+        elevation={0} 
+        sx={{ 
+          borderRadius: 3, 
+          border: '1px solid #e5e7eb',
+          overflow: 'hidden'
+        }}
+      >
+        {/* Table Header */}
+        <div className="px-6 py-4 border-b border-gray-200 bg-slate-50">
+          <div className="flex items-center justify-between">
             <div>
-              <Typography variant="h6" className="font-semibold text-gray-800 mb-1">
-                📝 Timesheets Requiring Approval
+              <Typography variant="subtitle1" sx={{ fontWeight: 600, color: '#1e293b' }}>
+                {selectedStatus === 'pending' && 'Pending Approvals'}
+                {selectedStatus === 'approved' && 'Approved Timesheets'}
+                {selectedStatus === 'rejected' && 'Rejected Timesheets'}
+                {selectedStatus === 'not-submitted' && 'Not Submitted'}
               </Typography>
-              <Typography variant="body2" color="textSecondary">
-                {enhancedTimesheets.length} timesheet{enhancedTimesheets.length !== 1 ? 's' : ''} waiting for your review
+              <Typography variant="body2" sx={{ color: '#64748b' }}>
+                {(selectedStatus === 'not-submitted' ? notSubmittedData.length : enhancedTimesheets.length)} record{(selectedStatus === 'not-submitted' ? notSubmittedData.length : enhancedTimesheets.length) !== 1 ? 's' : ''}
               </Typography>
             </div>
-          </Box>
-        </Box>
+          </div>
+        </div>
 
         <TableContainer>
-          <Table sx={{ '& .MuiTableRow-hover:hover': { backgroundColor: '#f8fafc' } }}>
-            <TableHead sx={{ backgroundColor: '#f1f5f9' }}>
-              <TableRow>
-                <TableCell className="font-semibold text-gray-700">Employee</TableCell>
-                <TableCell className="font-semibold text-gray-700">Project</TableCell>
-                <TableCell className="font-semibold text-gray-700">Period</TableCell>
-                <TableCell className="font-semibold text-gray-700">Hours</TableCell>
-                <TableCell className="font-semibold text-gray-700">Status</TableCell>
-                <TableCell className="font-semibold text-gray-700">Submitted</TableCell>
-                <TableCell className="font-semibold text-gray-700">Actions</TableCell>
+          <Table>
+            <TableHead>
+              <TableRow sx={{ bgcolor: '#f8fafc' }}>
+                <TableCell sx={{ fontWeight: 600, color: '#475569', py: 2 }}>Employee</TableCell>
+                <TableCell sx={{ fontWeight: 600, color: '#475569', py: 2 }}>Project</TableCell>
+                <TableCell sx={{ fontWeight: 600, color: '#475569', py: 2 }}>Period</TableCell>
+                <TableCell sx={{ fontWeight: 600, color: '#475569', py: 2 }}>Hours</TableCell>
+                <TableCell sx={{ fontWeight: 600, color: '#475569', py: 2 }}>Status</TableCell>
+                <TableCell sx={{ fontWeight: 600, color: '#475569', py: 2 }}>Submitted</TableCell>
+                <TableCell sx={{ fontWeight: 600, color: '#475569', py: 2 }}>Actions</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
-              {enhancedTimesheets.map((timesheet) => {
+              {(selectedStatus === 'not-submitted' ? notSubmittedData : enhancedTimesheets).map((timesheet) => {
                 const priorityConfig = getPriorityConfig(timesheet.totalHours || 0);
                 
                 return (
                   <TableRow 
                     key={timesheet.id} 
-                    hover 
-                    className="transition-all duration-200"
                     sx={{ 
-                      '&:hover': { 
-                        backgroundColor: '#f8fafc',
-                        transform: 'scale(1.001)',
-                        boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
-                      } 
+                      '&:hover': { bgcolor: '#f8fafc' },
+                      '&:last-child td': { borderBottom: 0 }
                     }}
                   >
-                    <TableCell>
-                      <Box className="flex items-center space-x-3">
+                    <TableCell sx={{ py: 2.5 }}>
+                      <div className="flex items-center gap-3">
                         <Avatar 
                           sx={{ 
-                            width: 44, 
-                            height: 44, 
-                            backgroundColor: 'primary.main',
-                            fontWeight: 'bold',
-                            fontSize: '14px'
+                            width: 40, 
+                            height: 40, 
+                            bgcolor: '#0066A4',
+                            fontSize: '0.875rem',
+                            fontWeight: 600
                           }}
                         >
                           {getEmployeeInitials(timesheet.employee_name || '')}
                         </Avatar>
-                        <Box>
-                          <Typography variant="body2" className="font-medium text-gray-900">
+                        <div>
+                          <Typography variant="body2" sx={{ fontWeight: 500, color: '#1e293b' }}>
                             {timesheet.employee_name || 'N/A'}
                           </Typography>
-                          <Typography variant="body2" color="textSecondary" className="text-sm">
+                          <Typography variant="caption" sx={{ color: '#64748b' }}>
                             {timesheet.employee_email || 'N/A'}
                           </Typography>
-                        </Box>
-                      </Box>
+                        </div>
+                      </div>
                     </TableCell>
 
-                    <TableCell>
-                      <Box>
-                        <Typography variant="body2" className="font-medium text-gray-900">
-                          {timesheet.project_name || 'N/A'}
+                    <TableCell sx={{ py: 2.5 }}>
+                      <Typography variant="body2" sx={{ fontWeight: 500, color: '#1e293b', mb: 0.5 }}>
+                        {timesheet.project_name || 'N/A'}
+                      </Typography>
+                      <Chip
+                        size="small"
+                        label={timesheet.auto_approve ? 'Auto' : 'Manual'}
+                        sx={{
+                          bgcolor: timesheet.auto_approve ? '#dcfce7' : '#e0f2fe',
+                          color: timesheet.auto_approve ? '#166534' : '#0369a1',
+                          fontSize: '0.7rem',
+                          height: 20
+                        }}
+                      />
+                    </TableCell>
+
+                    <TableCell sx={{ py: 2.5 }}>
+                      <div className="flex items-center gap-1.5 mb-1">
+                        <CalendarToday sx={{ fontSize: 14, color: '#64748b' }} />
+                        <Typography variant="body2" sx={{ color: '#475569' }}>
+                          {timesheet.periodStart && timesheet.periodEnd 
+                            ? `${formatDate(timesheet.periodStart)} - ${formatDate(timesheet.periodEnd)}`
+                            : 'No timesheet created'}
                         </Typography>
-                        <Chip
-                          size="small"
-                          label={timesheet.auto_approve ? '🤖 Auto-approve' : '👤 Manual'}
-                          color={timesheet.auto_approve ? 'success' : 'primary'}
-                          variant="outlined"
-                          className="mt-1"
-                        />
-                      </Box>
+                      </div>
+                      <Chip 
+                        size="small" 
+                        label={timesheet.period_type || timesheet.periodType || 'N/A'} 
+                        variant="outlined"
+                        sx={{ fontSize: '0.7rem', height: 20, borderColor: '#cbd5e1' }}
+                      />
                     </TableCell>
 
-                    <TableCell>
-                      <Box>
-                        <Box className="flex items-center space-x-1 mb-1">
-                          <CalendarToday fontSize="small" color="action" />
-                          <Typography variant="body2" className="text-gray-700">
-                            {formatDate(timesheet.periodStart)} - {formatDate(timesheet.periodEnd)}
-                          </Typography>
-                        </Box>
-                        <Chip 
-                          size="small" 
-                          label={timesheet.period_type || timesheet.periodType} 
-                          variant="outlined"
-                          color="default"
-                        />
-                      </Box>
-                    </TableCell>
-
-                    <TableCell>
-                      <Box className="flex items-center space-x-2">
-                        <Typography 
-                          variant="h6" 
-                          className="font-bold"
-                          sx={{ color: priorityConfig.color }}
-                        >
-                          {priorityConfig.emoji} {timesheet.totalHours || 0}h
-                        </Typography>
-                        <Schedule fontSize="small" color="action" />
-                      </Box>
-                      <Typography variant="body2" color="textSecondary" className="text-xs">
-                        {priorityConfig.level} priority
+                    <TableCell sx={{ py: 2.5 }}>
+                      <Typography 
+                        variant="body1" 
+                        sx={{ fontWeight: 600, color: priorityConfig.color }}
+                      >
+                        {timesheet.totalHours || 0}h
                       </Typography>
                     </TableCell>
 
-                    <TableCell>
-                      {getStatusChip(timesheet.status)}
+                    <TableCell sx={{ py: 2.5 }}>
+                      {getStatusChip(selectedStatus === 'not-submitted' ? 'not-submitted' : timesheet.status)}
                     </TableCell>
 
-                    <TableCell>
-                      <Box className="flex items-center space-x-1">
-                        <AccessTime fontSize="small" color="action" />
-                        <Typography variant="body2" className="text-gray-600">
+                    <TableCell sx={{ py: 2.5 }}>
+                      <div className="flex items-center gap-1.5">
+                        <AccessTime sx={{ fontSize: 14, color: '#64748b' }} />
+                        <Typography variant="body2" sx={{ color: '#64748b' }}>
                           {timesheet.submittedAt ? formatDateTime(timesheet.submittedAt) : '-'}
                         </Typography>
-                      </Box>
+                      </div>
                     </TableCell>
 
-                    <TableCell>
-                      <Box className="flex space-x-1">
+                    <TableCell sx={{ py: 2.5 }}>
+                      <div className="flex items-center gap-2">
                         <Tooltip title="View details">
                           <IconButton
                             size="small"
                             onClick={() => openViewDetails(timesheet)}
                             sx={{ 
-                              color: 'text.secondary',
-                              '&:hover': { 
-                                color: 'primary.main',
-                                backgroundColor: 'primary.light',
-                                transform: 'scale(1.1)'
-                              }
+                              color: '#64748b',
+                              '&:hover': { color: '#0066A4', bgcolor: '#e0f2fe' }
                             }}
                           >
                             <Visibility fontSize="small" />
                           </IconButton>
                         </Tooltip>
 
-                        <Tooltip title="Approve timesheet">
-                          <span>
+                        {timesheet.status === 'pending' && (
+                          <>
                             <Button
                               size="small"
                               variant="contained"
-                              color="success"
-                              startIcon={<Check fontSize="small" />}
+                              startIcon={<Check sx={{ fontSize: 16 }} />}
                               onClick={() => handleApprove(timesheet.id)}
-                              disabled={timesheet.status !== 'pending' || mutationLoading}
+                              disabled={mutationLoading}
                               sx={{ 
-                                minWidth: '90px',
-                                '&:hover': { transform: 'scale(1.05)' }
+                                bgcolor: '#059669',
+                                textTransform: 'none',
+                                fontWeight: 500,
+                                borderRadius: 2,
+                                px: 2,
+                                '&:hover': { bgcolor: '#047857' }
                               }}
                             >
                               Approve
                             </Button>
-                          </span>
-                        </Tooltip>
 
-                        <Tooltip title="Reject with reason">
-                          <span>
                             <Button
                               size="small"
                               variant="outlined"
-                              color="error"
-                              startIcon={<Close fontSize="small" />}
+                              startIcon={<Close sx={{ fontSize: 16 }} />}
                               onClick={() => openRejectDialog(timesheet)}
-                              disabled={timesheet.status !== 'pending' || mutationLoading}
+                              disabled={mutationLoading}
                               sx={{ 
-                                minWidth: '80px',
-                                '&:hover': { transform: 'scale(1.05)' }
+                                borderColor: '#dc2626',
+                                color: '#dc2626',
+                                textTransform: 'none',
+                                fontWeight: 500,
+                                borderRadius: 2,
+                                '&:hover': { 
+                                  borderColor: '#b91c1c',
+                                  bgcolor: '#fef2f2'
+                                }
                               }}
                             >
                               Reject
                             </Button>
-                          </span>
-                        </Tooltip>
-                      </Box>
+                          </>
+                        )}
+                      </div>
                     </TableCell>
                   </TableRow>
                 );
@@ -591,24 +669,33 @@ const ApprovalDashboard: React.FC = () => {
         </TableContainer>
 
         {/* Empty State */}
-        {enhancedTimesheets.length === 0 && (
-          <Box className="text-center py-16">
-            <CheckCircleOutline sx={{ fontSize: '5rem', color: 'success.main', mb: 3 }} />
-            <Typography variant="h5" className="text-gray-600 mb-2 font-medium">
-              🎉 All caught up!
+        {(selectedStatus === 'not-submitted' ? notSubmittedData.length : enhancedTimesheets.length) === 0 && (
+          <div className="py-16 text-center">
+            <div className="mx-auto w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mb-4">
+              <CheckCircleOutline sx={{ fontSize: 32, color: '#059669' }} />
+            </div>
+            <Typography variant="h6" sx={{ color: '#1e293b', fontWeight: 600, mb: 1 }}>
+              All caught up!
             </Typography>
-            <Typography variant="body1" color="textSecondary" className="mb-4">
-              No pending timesheets require your approval at this time.
+            <Typography variant="body2" sx={{ color: '#64748b', mb: 4 }}>
+              No {selectedStatus} timesheets at this time.
             </Typography>
             <Button
               variant="outlined"
               startIcon={<Refresh />}
               onClick={handleRefresh}
               disabled={refreshing}
+              sx={{
+                borderColor: '#0066A4',
+                color: '#0066A4',
+                textTransform: 'none',
+                borderRadius: 2,
+                '&:hover': { bgcolor: '#f0f9ff' }
+              }}
             >
-              {refreshing ? 'Refreshing...' : 'Refresh Dashboard'}
+              {refreshing ? 'Refreshing...' : 'Refresh'}
             </Button>
-          </Box>
+          </div>
         )}
       </Paper>
 
@@ -616,139 +703,146 @@ const ApprovalDashboard: React.FC = () => {
       <Dialog 
         open={viewDetailsOpen} 
         onClose={closeViewDetails} 
-        maxWidth="lg" 
+        maxWidth="md" 
         fullWidth
         PaperProps={{
-          sx: { borderRadius: 3, minHeight: '60vh' }
+          sx: { borderRadius: 3 }
         }}
       >
-        <DialogTitle sx={{ background: 'linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%)', borderRadius: '12px 12px 0 0' }}>
-          <Box className="flex items-center space-x-3">
-            <Avatar sx={{ backgroundColor: 'primary.main' }}>
-              <Visibility />
-            </Avatar>
+        <DialogTitle sx={{ pb: 1 }}>
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-blue-50 rounded-lg">
+              <Visibility sx={{ color: '#0066A4' }} />
+            </div>
             <div>
-              <Typography variant="h5" className="font-bold">
+              <Typography variant="h6" sx={{ fontWeight: 600, color: '#1e293b' }}>
                 Timesheet Details
               </Typography>
-              <Typography variant="body2" color="textSecondary">
-                Complete timesheet information and breakdown
+              <Typography variant="body2" sx={{ color: '#64748b' }}>
+                Complete timesheet information
               </Typography>
             </div>
-          </Box>
+          </div>
         </DialogTitle>
         
-        <DialogContent className="pt-6">
+        <DialogContent>
           {selectedTimesheet && (
             <>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                <div>
-                  <Paper className="p-6 h-full" sx={{ backgroundColor: '#f8fafc', borderRadius: 2, boxShadow: 'none' }}>
-                    <Box className="flex items-center mb-4">
-                      <Avatar sx={{ backgroundColor: 'success.main', mr: 2 }}>
-                        <PersonOutline />
-                      </Avatar>
-                      <Typography variant="h6" className="font-semibold text-gray-700">
-                        Employee Information
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                {/* Employee Info */}
+                <Paper 
+                  elevation={0} 
+                  sx={{ p: 3, bgcolor: '#f8fafc', borderRadius: 2, border: '1px solid #e5e7eb' }}
+                >
+                  <div className="flex items-center gap-2 mb-3">
+                    <PersonOutline sx={{ color: '#0066A4', fontSize: 20 }} />
+                    <Typography variant="subtitle2" sx={{ fontWeight: 600, color: '#475569' }}>
+                      Employee Information
+                    </Typography>
+                  </div>
+                  <div className="space-y-3">
+                    <div>
+                      <Typography variant="caption" sx={{ color: '#64748b' }}>Full Name</Typography>
+                      <Typography variant="body2" sx={{ fontWeight: 500, color: '#1e293b' }}>
+                        {selectedTimesheet.employee_name || 'Not provided'}
                       </Typography>
-                    </Box>
-                    <Box className="space-y-3">
-                      <Box>
-                        <Typography variant="body2" className="font-medium text-gray-600 mb-1">
-                          Full Name
-                        </Typography>
-                        <Typography variant="body1" className="text-gray-900">
-                          {selectedTimesheet.employee_name || 'Not provided'}
-                        </Typography>
-                      </Box>
-                      <Box>
-                        <Typography variant="body2" className="font-medium text-gray-600 mb-1">
-                          Email Address
-                        </Typography>
-                        <Typography variant="body1" className="text-gray-900">
-                          {selectedTimesheet.employee_email || 'Not provided'}
-                        </Typography>
-                      </Box>
-                    </Box>
-                  </Paper>
-                </div>
+                    </div>
+                    <div>
+                      <Typography variant="caption" sx={{ color: '#64748b' }}>Email Address</Typography>
+                      <Typography variant="body2" sx={{ fontWeight: 500, color: '#1e293b' }}>
+                        {selectedTimesheet.employee_email || 'Not provided'}
+                      </Typography>
+                    </div>
+                  </div>
+                </Paper>
                 
-                <div>
-                  <Paper className="p-6 h-full" sx={{ backgroundColor: '#f8fafc', borderRadius: 2, boxShadow: 'none' }}>
-                    <Box className="flex items-center mb-4">
-                      <Avatar sx={{ backgroundColor: 'primary.main', mr: 2 }}>
-                        <BusinessOutline />
-                      </Avatar>
-                      <Typography variant="h6" className="font-semibold text-gray-700">
-                        Project Information
+                {/* Project Info */}
+                <Paper 
+                  elevation={0} 
+                  sx={{ p: 3, bgcolor: '#f8fafc', borderRadius: 2, border: '1px solid #e5e7eb' }}
+                >
+                  <div className="flex items-center gap-2 mb-3">
+                    <BusinessOutline sx={{ color: '#0066A4', fontSize: 20 }} />
+                    <Typography variant="subtitle2" sx={{ fontWeight: 600, color: '#475569' }}>
+                      Project Information
+                    </Typography>
+                  </div>
+                  <div className="space-y-3">
+                    <div>
+                      <Typography variant="caption" sx={{ color: '#64748b' }}>Project Name</Typography>
+                      <Typography variant="body2" sx={{ fontWeight: 500, color: '#1e293b' }}>
+                        {selectedTimesheet.project_name || 'Not provided'}
                       </Typography>
-                    </Box>
-                    <Box className="space-y-3">
-                      <Box>
-                        <Typography variant="body2" className="font-medium text-gray-600 mb-1">
-                          Project Name
-                        </Typography>
-                        <Typography variant="body1" className="text-gray-900">
-                          {selectedTimesheet.project_name || 'Not provided'}
-                        </Typography>
-                      </Box>
-                      <Box>
-                        <Typography variant="body2" className="font-medium text-gray-600 mb-1">
-                          Total Hours
-                        </Typography>
-                        <Typography variant="h6" className="font-bold" sx={{ color: getPriorityConfig(selectedTimesheet.totalHours || 0).color }}>
-                          {getPriorityConfig(selectedTimesheet.totalHours || 0).emoji} {selectedTimesheet.totalHours || 0} hours
-                        </Typography>
-                      </Box>
-                    </Box>
-                  </Paper>
-                </div>
+                    </div>
+                    <div>
+                      <Typography variant="caption" sx={{ color: '#64748b' }}>Total Hours</Typography>
+                      <Typography variant="h6" sx={{ fontWeight: 600, color: getPriorityConfig(selectedTimesheet.totalHours || 0).color }}>
+                        {selectedTimesheet.totalHours || 0} hours
+                      </Typography>
+                    </div>
+                  </div>
+                </Paper>
               </div>
               
-              <Divider sx={{ my: 4 }} />
+              <Divider sx={{ my: 3 }} />
 
               {/* Daily Entries */}
               <div>
-                <Typography variant="h6" className="font-semibold text-gray-700 mb-4">Daily Entries</Typography>
-                <div className="space-y-3 max-h-96 overflow-y-auto pr-2">
+                <Typography variant="subtitle2" sx={{ fontWeight: 600, color: '#475569', mb: 2 }}>
+                  Daily Entries
+                </Typography>
+                <div className="space-y-2 max-h-64 overflow-y-auto">
                   {selectedTimesheet.dailyEntries && selectedTimesheet.dailyEntries.length > 0 ? (
                     selectedTimesheet.dailyEntries.map((day, index) => (
-                      <div key={index} className="bg-gray-50 p-4 rounded-lg border">
+                      <Paper 
+                        key={index} 
+                        elevation={0}
+                        sx={{ p: 2, bgcolor: '#f8fafc', borderRadius: 2, border: '1px solid #e5e7eb' }}
+                      >
                         <div className="flex justify-between items-center mb-2">
-                          <Typography variant="subtitle2" className="font-semibold">
+                          <Typography variant="body2" sx={{ fontWeight: 600, color: '#1e293b' }}>
                             {formatDate(day.date)}
                           </Typography>
                           <Chip 
                             label={`${day.hours} hrs`}
                             size="small"
-                            color="primary"
-                            variant="outlined"
+                            sx={{ bgcolor: '#e0f2fe', color: '#0369a1', fontWeight: 500 }}
                           />
                         </div>
-                        <div className="space-y-1 pl-2 border-l-2 border-gray-200">
+                        <div className="pl-3 border-l-2 border-gray-200 space-y-1">
                           {day.tasks.map((task, taskIndex) => (
-                            <div key={taskIndex} className="flex justify-between text-sm text-gray-700">
-                              <span>{task.name}</span>
-                              <span className="font-semibold">{task.hours} hrs</span>
+                            <div key={taskIndex} className="flex justify-between text-sm">
+                              <Typography variant="caption" sx={{ color: '#475569' }}>{task.name}</Typography>
+                              <Typography variant="caption" sx={{ fontWeight: 600, color: '#1e293b' }}>{task.hours} hrs</Typography>
                             </div>
                           ))}
                         </div>
-                      </div>
+                      </Paper>
                     ))
                   ) : (
-                    <Typography variant="body2" color="textSecondary" className="text-center py-8">
-                      No daily entries found for this timesheet.
-                    </Typography>
+                    <div className="text-center py-8">
+                      <Typography variant="body2" sx={{ color: '#94a3b8' }}>
+                        No daily entries found for this timesheet.
+                      </Typography>
+                    </div>
                   )}
                 </div>
               </div>
             </>
-
           )}
         </DialogContent>
         
-        <DialogActions className="p-6 bg-gray-50">
-          <Button onClick={closeViewDetails} variant="outlined" size="large">
+        <DialogActions sx={{ p: 3, borderTop: '1px solid #e5e7eb' }}>
+          <Button 
+            onClick={closeViewDetails} 
+            variant="outlined"
+            sx={{ 
+              borderColor: '#cbd5e1', 
+              color: '#475569',
+              textTransform: 'none',
+              borderRadius: 2
+            }}
+          >
             Close
           </Button>
           {selectedTimesheet && selectedTimesheet.status === 'pending' && (
@@ -758,10 +852,15 @@ const ApprovalDashboard: React.FC = () => {
                   closeViewDetails();
                   openRejectDialog(selectedTimesheet);
                 }}
-                color="error"
                 variant="outlined"
+                sx={{ 
+                  borderColor: '#dc2626', 
+                  color: '#dc2626',
+                  textTransform: 'none',
+                  borderRadius: 2,
+                  '&:hover': { bgcolor: '#fef2f2' }
+                }}
                 startIcon={<Close />}
-                size="large"
               >
                 Reject
               </Button>
@@ -770,11 +869,15 @@ const ApprovalDashboard: React.FC = () => {
                   handleApprove(selectedTimesheet.id);
                   closeViewDetails();
                 }}
-                color="success"
                 variant="contained"
-                startIcon={<Check />}
                 disabled={mutationLoading}
-                size="large"
+                sx={{ 
+                  bgcolor: '#059669',
+                  textTransform: 'none',
+                  borderRadius: 2,
+                  '&:hover': { bgcolor: '#047857' }
+                }}
+                startIcon={<Check />}
               >
                 Approve
               </Button>
@@ -787,43 +890,43 @@ const ApprovalDashboard: React.FC = () => {
       <Dialog 
         open={rejectDialogOpen} 
         onClose={closeRejectDialog} 
-        maxWidth="md" 
+        maxWidth="sm" 
         fullWidth
         PaperProps={{
           sx: { borderRadius: 3 }
         }}
       >
-        <DialogTitle sx={{ background: 'linear-gradient(135deg, #fef2f2 0%, #fecaca 100%)', borderRadius: '12px 12px 0 0' }}>
-          <Box className="flex items-center space-x-3">
-            <Avatar sx={{ backgroundColor: 'error.main' }}>
-              <ErrorOutline />
-            </Avatar>
+        <DialogTitle sx={{ pb: 1 }}>
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-red-50 rounded-lg">
+              <ErrorOutline sx={{ color: '#dc2626' }} />
+            </div>
             <div>
-              <Typography variant="h5" className="font-bold">
+              <Typography variant="h6" sx={{ fontWeight: 600, color: '#1e293b' }}>
                 Reject Timesheet
               </Typography>
-              <Typography variant="body2" color="textSecondary">
-                Please provide detailed feedback for the employee
+              <Typography variant="body2" sx={{ color: '#64748b' }}>
+                Provide feedback for the employee
               </Typography>
             </div>
-          </Box>
+          </div>
         </DialogTitle>
         
-        <DialogContent className="pt-6">
-          <Alert severity="info" className="mb-6" sx={{ borderRadius: 2 }}>
-            <Typography variant="body2" className="font-medium">
-              💡 <strong>Tip:</strong> Clear, specific feedback helps employees understand what needs to be corrected.
+        <DialogContent>
+          <Alert severity="info" sx={{ mt: 2, mb: 3, borderRadius: 2 }}>
+            <Typography variant="body2">
+              Clear, specific feedback helps employees understand what needs to be corrected.
             </Typography>
           </Alert>
           
-          <Typography variant="body1" className="mb-4 text-gray-700 font-medium">
-            Reason for rejection:
+          <Typography variant="body2" sx={{ fontWeight: 500, color: '#475569', mb: 1.5 }}>
+            Reason for rejection
           </Typography>
           
           <TextField
             autoFocus
             multiline
-            rows={6}
+            rows={4}
             fullWidth
             variant="outlined"
             value={rejectionReason}
@@ -834,24 +937,38 @@ const ApprovalDashboard: React.FC = () => {
             sx={{ 
               '& .MuiOutlinedInput-root': { 
                 borderRadius: 2,
-                backgroundColor: '#fafafa'
+                '&:hover fieldset': { borderColor: '#0066A4' },
+                '&.Mui-focused fieldset': { borderColor: '#0066A4' }
               } 
             }}
           />
         </DialogContent>
         
-        <DialogActions className="p-6 bg-gray-50">
-          <Button onClick={closeRejectDialog} variant="outlined" size="large">
+        <DialogActions sx={{ p: 3, borderTop: '1px solid #e5e7eb' }}>
+          <Button 
+            onClick={closeRejectDialog} 
+            variant="outlined"
+            sx={{ 
+              borderColor: '#cbd5e1', 
+              color: '#475569',
+              textTransform: 'none',
+              borderRadius: 2
+            }}
+          >
             Cancel
           </Button>
           <Button 
             onClick={handleReject} 
-            color="error"
             variant="contained"
             disabled={!rejectionReason.trim() || mutationLoading}
-            startIcon={mutationLoading ? <CircularProgress size={16} /> : <Close />}
-            size="large"
-            sx={{ minWidth: '140px' }}
+            startIcon={mutationLoading ? <CircularProgress size={16} color="inherit" /> : <Close />}
+            sx={{ 
+              bgcolor: '#dc2626',
+              textTransform: 'none',
+              borderRadius: 2,
+              '&:hover': { bgcolor: '#b91c1c' },
+              '&:disabled': { bgcolor: '#94a3b8' }
+            }}
           >
             {mutationLoading ? 'Rejecting...' : 'Reject Timesheet'}
           </Button>
@@ -859,35 +976,69 @@ const ApprovalDashboard: React.FC = () => {
       </Dialog>
 
       {/* Not Submitted Dialog */}
-      <Dialog open={notSubmittedDialogOpen} onClose={() => setNotSubmittedDialogOpen(false)} maxWidth="md" fullWidth>
-        <DialogTitle sx={{ color: 'warning.main' }}>⚠️ Employees Who Haven't Submitted Timesheets</DialogTitle>
+      <Dialog 
+        open={notSubmittedDialogOpen} 
+        onClose={() => setNotSubmittedDialogOpen(false)} 
+        maxWidth="md" 
+        fullWidth
+        PaperProps={{
+          sx: { borderRadius: 3 }
+        }}
+      >
+        <DialogTitle sx={{ pb: 1 }}>
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-amber-50 rounded-lg">
+              <Schedule sx={{ color: '#d97706' }} />
+            </div>
+            <div>
+              <Typography variant="h6" sx={{ fontWeight: 600, color: '#1e293b' }}>
+                Employees Not Submitted
+              </Typography>
+              <Typography variant="body2" sx={{ color: '#64748b' }}>
+                These employees need to submit their timesheets
+              </Typography>
+            </div>
+          </div>
+        </DialogTitle>
         <DialogContent>
-          <Alert severity="warning" sx={{ mb: 2 }}>
+          <Alert severity="warning" sx={{ mt: 2, mb: 3, borderRadius: 2 }}>
             These employees need to submit their timesheets for the current period.
           </Alert>
           <TableContainer>
             <Table>
               <TableHead>
-                <TableRow>
-                  <TableCell>Employee Name</TableCell>
-                  <TableCell>Email</TableCell>
-                  <TableCell>Project</TableCell>
-                  <TableCell>Status</TableCell>
+                <TableRow sx={{ bgcolor: '#f8fafc' }}>
+                  <TableCell sx={{ fontWeight: 600, color: '#475569' }}>Employee Name</TableCell>
+                  <TableCell sx={{ fontWeight: 600, color: '#475569' }}>Email</TableCell>
+                  <TableCell sx={{ fontWeight: 600, color: '#475569' }}>Project</TableCell>
+                  <TableCell sx={{ fontWeight: 600, color: '#475569' }}>Status</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
                 {notSubmittedData.map((employee, index) => (
-                  <TableRow key={`${employee.id}-${index}`}>
-                    <TableCell>{employee.name}</TableCell>
-                    <TableCell>{employee.email}</TableCell>
+                  <TableRow key={`${employee.id}-${index}`} sx={{ '&:hover': { bgcolor: '#f8fafc' } }}>
                     <TableCell>
-                      <Chip label={employee.project_name} color="warning" size="small" />
+                      <Typography variant="body2" sx={{ fontWeight: 500 }}>{employee.name}</Typography>
+                    </TableCell>
+                    <TableCell>
+                      <Typography variant="body2" sx={{ color: '#64748b' }}>{employee.email}</Typography>
+                    </TableCell>
+                    <TableCell>
+                      <Chip 
+                        label={employee.project_name} 
+                        size="small"
+                        sx={{ bgcolor: '#fef3c7', color: '#92400e', fontWeight: 500 }}
+                      />
                     </TableCell>
                     <TableCell>
                       <Chip 
                         label={employee.timesheet_status === 'not_created' ? 'Not Created' : 'Draft'} 
-                        color={employee.timesheet_status === 'not_created' ? 'error' : 'warning'}
-                        size="small" 
+                        size="small"
+                        sx={{ 
+                          bgcolor: employee.timesheet_status === 'not_created' ? '#fee2e2' : '#fef3c7',
+                          color: employee.timesheet_status === 'not_created' ? '#991b1b' : '#92400e',
+                          fontWeight: 500
+                        }}
                       />
                     </TableCell>
                   </TableRow>
@@ -896,27 +1047,22 @@ const ApprovalDashboard: React.FC = () => {
             </Table>
           </TableContainer>
         </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setNotSubmittedDialogOpen(false)}>Close</Button>
+        <DialogActions sx={{ p: 3, borderTop: '1px solid #e5e7eb' }}>
+          <Button 
+            onClick={() => setNotSubmittedDialogOpen(false)}
+            variant="outlined"
+            sx={{ 
+              borderColor: '#cbd5e1', 
+              color: '#475569',
+              textTransform: 'none',
+              borderRadius: 2
+            }}
+          >
+            Close
+          </Button>
         </DialogActions>
       </Dialog>
-
-      {/* Floating Action Button for Quick Refresh */}
-      <Fab
-        color="primary"
-        aria-label="refresh"
-        sx={{
-          position: 'fixed',
-          bottom: 32,
-          right: 32,
-          zIndex: 1000,
-        }}
-        onClick={handleRefresh}
-        disabled={refreshing}
-      >
-        {refreshing ? <CircularProgress size={24} /> : <Refresh />}
-      </Fab>
-    </Container>
+    </div>
   );
 };
 

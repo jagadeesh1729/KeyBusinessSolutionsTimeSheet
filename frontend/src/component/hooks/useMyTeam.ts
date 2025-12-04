@@ -17,7 +17,7 @@ export const useMyTeam = () => {
   const [error, setError] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
-    if (!user?.id) {
+    if (!user?.userId) {
       setLoading(false);
       return;
     }
@@ -26,14 +26,14 @@ export const useMyTeam = () => {
     setError(null);
 
     try {
-      const response = await apiClient.get(`/users/pm-employees/${user.id}`);
+      const response = await apiClient.get(`/users/pm-employees/${user.userId}`);
       setTeam(response.data.data || []);
     } catch (err: any) {
       setError(err.response?.data?.message || 'Failed to fetch your team members.');
     } finally {
       setLoading(false);
     }
-  }, [user?.id]);
+  }, [user?.userId]);
 
   useEffect(() => {
     fetchData();
