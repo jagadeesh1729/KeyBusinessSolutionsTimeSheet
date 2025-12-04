@@ -17,6 +17,7 @@ import { ClientSecretCredential } from '@azure/identity';
 import 'isomorphic-fetch';
 import { changeLogService, ChangeLogInput } from './changeLogService';
 import { UserChangeLog, UserProjectChangeLog, EmployeeChangeLog } from '../models/ChangeLog';
+import dotenv from 'dotenv';
 dotenv.config();
 
 export class AuthService {
@@ -44,7 +45,7 @@ export class AuthService {
         return null;
       }
       return Client.init({
-        authProvider: (done) => done(null, token.token),
+        authProvider: (done: (err: any, token?: string | null) => void) => done(null, token.token),
       });
     } catch (error: any) {
       console.error('Error creating Graph client:', error?.message || error);
