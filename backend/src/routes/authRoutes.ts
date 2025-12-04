@@ -4,19 +4,18 @@ import { authenticate, AuthRequest } from '../middleware/authMiddleware';
 import { requireAdmin, requirePMOrAdmin } from '../middleware/roleMiddleware';
 import Logger from '../utils/logger';
 import { CreateUserRequest, LoginRequest, UserRole, CreatePMRequest, RegisterEmployeeRequest, AssignProjectsRequest, AssignEmployeesToPMRequest } from '../models/User';
+import { authRateLimiter } from '../middleware/rateLimiters';
 
 const router = Router();
 const authService = new AuthService();
 
-router.post('/login', async (req: AuthRequest, res: Response) => {
+router.post('/login', authRateLimiter, async (req: AuthRequest, res: Response) => {
   try {
     const { email, password }: LoginRequest = req.body;
     if (!email || !password) {
       return res.status(400).json({ success: false, message: 'Email and password are required' });
     }
-    console.log(req.body)
     const result = await authService.login({ email, password });
-        console.log(result)
 
     if (!result.success) {
       return res.status(401).json(result);
@@ -84,7 +83,6 @@ router.get('/profile', authenticate, async (req: AuthRequest, res: Response) => 
   try {
     // The user ID is available from the authenticated request's token payload.
     const userId = req.user!.userId;
-    console.log('Fetching profile for user ID in the backend:', userId);
 
     // Use the AuthService to fetch the full, detailed user profile from the database.
     const result = await authService.getUserProfile(userId);

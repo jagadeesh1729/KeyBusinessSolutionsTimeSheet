@@ -1,19 +1,20 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
-import { useEffect } from 'react'
+import { Suspense, lazy, useEffect } from 'react'
 import { toPascalCase, shouldSkipInput } from './utils/pascalCase'
 import './App.css'
-import Login from './component/mocules/Login'
-import ProjectManagerDashboard from './component/pages/ProjectManagerDashboard'
-import AdminDashboardPage from './component/pages/AdminDashboardPage'
-import EmployeeDashboardPage from './component/pages/EmployeeDashboardPage'
-import ProtectedRoute from './component/utils/ProtectedRoute.tsx'
 import Layout from './component/layout/Layout.tsx'
-import SignupGate from './component/mocules/SignGate.tsx'
-import UserTimesheetEntry from './component/pages/UserTimesheetEntry.tsx'
-import TimesheetHistory from './component/pages/TimesheetHistory.tsx'
-import PreviousDrafts from './component/pages/PreviousDrafts.tsx'
-import OfferLetter from './component/offerletter/OfferLetter.tsx'
-import AdminOfferLetterPanel from './component/offerletter/AdminOfferLetterPanel.tsx'
+import ProtectedRoute from './component/utils/ProtectedRoute.tsx'
+
+const Login = lazy(() => import('./component/mocules/Login'))
+const ProjectManagerDashboard = lazy(() => import('./component/pages/ProjectManagerDashboard'))
+const AdminDashboardPage = lazy(() => import('./component/pages/AdminDashboardPage'))
+const EmployeeDashboardPage = lazy(() => import('./component/pages/EmployeeDashboardPage'))
+const SignupGate = lazy(() => import('./component/mocules/SignGate.tsx'))
+const UserTimesheetEntry = lazy(() => import('./component/pages/UserTimesheetEntry.tsx'))
+const TimesheetHistory = lazy(() => import('./component/pages/TimesheetHistory.tsx'))
+const PreviousDrafts = lazy(() => import('./component/pages/PreviousDrafts.tsx'))
+const OfferLetter = lazy(() => import('./component/offerletter/OfferLetter.tsx'))
+const AdminOfferLetterPanel = lazy(() => import('./component/offerletter/AdminOfferLetterPanel.tsx'))
 
 function App() {
   useEffect(() => {
@@ -44,7 +45,7 @@ function App() {
   }, [])
 
   return (
-    <>
+    <Suspense fallback={<div />}>
       <Routes>
         {/* PM Dashboard - outside Layout (has its own sidebar) */}
         <Route element={<ProtectedRoute />}>
@@ -78,7 +79,7 @@ function App() {
           </Route>
         </Route>
       </Routes>
-    </>
+    </Suspense>
   )
 }
 

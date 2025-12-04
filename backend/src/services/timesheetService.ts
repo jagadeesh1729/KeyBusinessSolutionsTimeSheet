@@ -791,7 +791,7 @@ export class TimesheetService {
       const resolved = this.resolveRange(range, startDate, endDate);
       const dateFilter = resolved.start && resolved.end ? ` AND t.period_start >= ? AND t.period_end <= ?` : '';
       const dfParams = resolved.start && resolved.end ? [resolved.start, resolved.end] : [];
-      
+
       // Get total employees managed by this PM
       const employeeRows = (await database.query(
         `SELECT COUNT(DISTINCT e.id) as total_employees
@@ -802,7 +802,23 @@ export class TimesheetService {
          WHERE up1.user_id = ? AND p.status = 'Active'`,
         [managerId]
       )) as RowDataPacket[];
-      
+
+      // Get total active projects managed by this PM
+      const projectRows = (await database.query(
+        `SELECT COUNT(DISTINCT p.id) as total_projects
+         FROM user_projects up
+         JOIN projects p ON up.project_id = p.id
+         WHERE up.user_id = ? AND p.status = 'Active'`,
+        [managerId]
+      )) as RowDataPacket[];
+
+      // Get total project managers (system-wide) for consistency with admin view
+      const pmRows = (await database.query(
+        `SELECT COUNT(*) as total_project_managers
+         FROM users u
+         WHERE u.role = 'project_manager' AND u.is_active = 1`
+      )) as RowDataPacket[];
+
       // Get timesheet counts
       const filledRows = (await database.query(
         `SELECT COUNT(*) as filled_timesheets
@@ -836,13 +852,31 @@ export class TimesheetService {
          FROM timesheets t
          JOIN projects p ON t.project_id = p.id
          JOIN user_projects up ON up.project_id = p.id
-         WHERE up.user_id = ? AND t.status = 'rejected'${dateFilter}`,
+        WHERE up.user_id = ? AND t.status = 'rejected'${dateFilter}`,
         [managerId, ...dfParams]
       )) as RowDataPacket[];
-      
+
+      const draftRows = (await database.query(
+        `SELECT COUNT(*) as draft_timesheets
+         FROM timesheets t
+         JOIN projects p ON t.project_id = p.id
+         JOIN user_projects up ON up.project_id = p.id
+         WHERE up.user_id = ? AND t.status = 'draft'${dateFilter}`,
+        [managerId, ...dfParams]
+      )) as RowDataPacket[];
+
+      const totalHoursRows = (await database.query(
+        `SELECT COALESCE(SUM(t.total_hours), 0) as total_hours_logged
+         FROM timesheets t
+         JOIN projects p ON t.project_id = p.id
+         JOIN user_projects up ON up.project_id = p.id
+         WHERE up.user_id = ?${dateFilter}`,
+        [managerId, ...dfParams]
+      )) as RowDataPacket[];
+
       // Get project statistics
       const projectStatsRows = (await database.query(
-        `SELECT 
+        `SELECT
           p.id as projectId,
           p.name as projectName,
           COUNT(DISTINCT up2.user_id) as totalAssigned,
@@ -858,16 +892,20 @@ export class TimesheetService {
         ORDER BY p.name`,
         [...(dateFilter ? dfParams : []), managerId]
       )) as RowDataPacket[];
-      
+
       const dashboardData = {
         totalEmployees: employeeRows[0]?.total_employees || 0,
+        totalProjects: projectRows[0]?.total_projects || 0,
+        totalProjectManagers: pmRows[0]?.total_project_managers || 0,
         filledTimesheets: filledRows[0]?.filled_timesheets || 0,
         pendingApproval: pendingRows[0]?.pending_approval || 0,
         approvedTimesheets: approvedRows[0]?.approved_timesheets || 0,
         rejectedTimesheets: rejectedRows[0]?.rejected_timesheets || 0,
+        draftTimesheets: draftRows[0]?.draft_timesheets || 0,
+        totalHoursLogged: Number(totalHoursRows[0]?.total_hours_logged || 0),
         projectStats: projectStatsRows
       };
-      
+
       console.log('Dashboard data:', dashboardData);
       
       return { success: true, data: dashboardData };
@@ -973,6 +1011,20 @@ export class TimesheetService {
          FROM employees e`
       )) as RowDataPacket[];
 
+      // Total active projects
+      const projectRows = (await database.query(
+        `SELECT COUNT(*) as total_projects
+         FROM projects p
+         WHERE p.status = 'Active'`
+      )) as RowDataPacket[];
+
+      // Total active project managers
+      const projectManagerRows = (await database.query(
+        `SELECT COUNT(*) as total_project_managers
+         FROM users u
+         WHERE u.role = 'project_manager' AND u.is_active = 1`
+      )) as RowDataPacket[];
+
       // Timesheet counts (global)
       const filledRows = (await database.query(
         `SELECT COUNT(*) as filled_timesheets
@@ -999,6 +1051,20 @@ export class TimesheetService {
         `SELECT COUNT(*) as rejected_timesheets
          FROM timesheets t
          WHERE t.status = 'rejected'${dateFilter}`,
+        dfParams
+      )) as RowDataPacket[];
+
+      const draftRows = (await database.query(
+        `SELECT COUNT(*) as draft_timesheets
+         FROM timesheets t
+         WHERE t.status = 'draft'${dateFilter}`,
+        dfParams
+      )) as RowDataPacket[];
+
+      const totalHoursRows = (await database.query(
+        `SELECT COALESCE(SUM(t.total_hours), 0) as total_hours_logged
+         FROM timesheets t
+         WHERE 1=1${dateFilter}`,
         dfParams
       )) as RowDataPacket[];
 
@@ -1033,11 +1099,15 @@ export class TimesheetService {
 
       const dashboardData = {
         totalEmployees: employeeRows[0]?.total_employees || 0,
+        totalProjects: projectRows[0]?.total_projects || 0,
+        totalProjectManagers: projectManagerRows[0]?.total_project_managers || 0,
         filledTimesheets: filledRows[0]?.filled_timesheets || 0,
         pendingApproval: pendingRows[0]?.pending_approval || 0,
         approvedTimesheets: approvedRows[0]?.approved_timesheets || 0,
         rejectedTimesheets: rejectedRows[0]?.rejected_timesheets || 0,
+        draftTimesheets: draftRows[0]?.draft_timesheets || 0,
         notSubmitted: notSubmittedRows[0]?.count || 0,
+        totalHoursLogged: Number(totalHoursRows[0]?.total_hours_logged || 0),
         projectStats: projectStatsRows
       };
 

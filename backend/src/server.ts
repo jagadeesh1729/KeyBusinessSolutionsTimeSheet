@@ -1,10 +1,11 @@
 import App from './app';
 import Logger from './utils/logger';
+import env from './config/env';
 
 const app = new App();
 const server = app.getApp();
 
-const PORT = process.env.PORT || 3000;
+const PORT = env.port || 3000;
 
 // Handle uncaught exceptions
 process.on('uncaughtException', (error: Error) => {
@@ -22,5 +23,5 @@ process.on(
 );
 
 server.listen(PORT, () => {
-  Logger.info(`🚀 Server is running on http://localhost:${PORT}`);
+  Logger.info(`🚀 Server is running on port ${PORT}`);
 });

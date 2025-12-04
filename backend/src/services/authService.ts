@@ -9,10 +9,9 @@ import {
 } from '../models/User';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
-import dotenv from 'dotenv';
 import Logger from '../utils/logger';
 import { ResultSetHeader, RowDataPacket } from 'mysql2';
-dotenv.config();
+import env from '../config/env';
 
 export class AuthService {
   private readonly saltrounds = 12;
@@ -42,7 +41,7 @@ export class AuthService {
           email: user.email,
           role: user.role,
         },
-        process.env.JWT_SECRET as string,
+        env.jwtSecret,
         { expiresIn: '1h' },
       );
       Logger.info(
@@ -241,7 +240,7 @@ export class AuthService {
     token: string,
   ): Promise<{ valid: boolean; payload?: jwt.JwtPayload | string }> {
     try {
-      const payload = jwt.verify(token, process.env.JWT_SECRET!);
+      const payload = jwt.verify(token, env.jwtSecret);
       return { valid: true, payload };
     } catch {
       return { valid: false };

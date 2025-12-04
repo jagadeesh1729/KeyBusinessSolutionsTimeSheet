@@ -7,6 +7,9 @@ import ResetPasswordForm from '../mocules/ResetPasswordForm';
 const Login = () => {
   const [view, setView] = useState<'login' | 'forgot' | 'reset'>('login');
   const [emailForReset, setEmailForReset] = useState('');
+  const backgroundImage =
+    import.meta.env.VITE_LOGIN_BACKGROUND_URL ||
+    'https://source.unsplash.com/random?wallpapers';
 
   const handleForgotPasswordClick = () => {
     setView('forgot');
@@ -27,7 +30,7 @@ const Login = () => {
       {/* Left side with branding/image */}
       <div
         className="hidden sm:flex sm:col-span-4 md:col-span-7 bg-cover bg-center flex-col justify-end p-10 text-white"
-        style={{ backgroundImage: 'url(https://source.unsplash.com/random?wallpapers)' }}
+        style={{ backgroundImage: `url(${backgroundImage})` }}
       >
         <Typography component="h1" variant="h3" sx={{ textShadow: '2px 2px 8px rgba(0,0,0,0.7)' }}>
           Streamline Your Workflow.
@@ -43,7 +46,11 @@ const Login = () => {
           elevation={6}
           square
           sx={{
-            width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center',
+            width: '100%',
+            height: '100%',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
             background: 'linear-gradient(to top, #f3f4f6, #ffffff)', // Subtle gradient from light gray to white
           }}
         >

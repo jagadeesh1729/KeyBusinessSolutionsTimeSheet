@@ -24,6 +24,14 @@ export const errorHandler = (
   res: Response,
   next: NextFunction,
 ): void => {
+  if (error.message === 'Not allowed by CORS') {
+    Logger.warn(`CORS rejection for origin ${req.headers.origin || 'unknown'}`)
+    res.status(403).json({
+      success: false,
+      message: 'Request origin is not allowed',
+    })
+    return
+  }
   Logger.error(`Unhandled error: ${error.message}`);
   res.status(500).json({
     success: false,

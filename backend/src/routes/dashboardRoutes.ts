@@ -24,7 +24,6 @@ router.get('/timesheet-stats', authenticate, requirePMOrAdmin, async (req: Reque
       return res.json(result);
     }
 
-    console.log('Getting dashboard stats for manager:', userId, 'range:', range);
     const result = await timesheetService.getDashboardStats({ managerId: userId, range, startDate, endDate });
     return res.json(result);
   } catch (error) {
