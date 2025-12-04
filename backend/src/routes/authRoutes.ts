@@ -188,7 +188,9 @@ router.put('/employee/:userId', authenticate, requireAdmin, async (req: AuthRequ
     if (isNaN(userId)) {
       return res.status(400).json({ success: false, message: 'Invalid user ID' });
     }
-    const result = await authService.updateEmployeeDetails(userId, req.body);
+    const result = await authService.updateEmployeeDetails(userId, req.body, {
+      changedBy: req.user?.userId ?? null,
+    });
     if (!result.success) {
       return res.status(400).json(result);
     }

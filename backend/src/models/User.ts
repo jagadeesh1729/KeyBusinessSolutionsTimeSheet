@@ -52,6 +52,14 @@ export interface RegisterEmployeeRequest {
   college_Dso_name?: string;
   college_Dso_email?: string;
   college_Dso_phone?: string;
+  // Primary Emergency Contact
+  primary_emergency_contact_full_name?: string;
+  primary_emergency_contact_relationship?: string;
+  primary_emergency_contact_home_phone?: string;
+  // Secondary Emergency Contact
+  secondary_emergency_contact_full_name?: string;
+  secondary_emergency_contact_relationship?: string;
+  secondary_emergency_contact_home_phone?: string;
 }
 
 

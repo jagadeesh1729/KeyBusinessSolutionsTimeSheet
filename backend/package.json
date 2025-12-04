@@ -21,6 +21,7 @@
     "@types/express": "^5.0.3",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^24.7.1",
+    "@types/pdfkit": "^0.12.7",
     "@typescript-eslint/eslint-plugin": "^8.45.0",
     "@typescript-eslint/parser": "^8.45.0",
     "eslint": "^9.37.0",
@@ -33,17 +34,22 @@
     "typescript": "^5.9.3"
   },
   "dependencies": {
-    "express": "^5.1.0",
+    "@azure/identity": "^4.13.0",
+    "@azure/msal-node": "^3.8.0",
     "@google-cloud/local-auth": "^3.0.1",
+    "@microsoft/microsoft-graph-client": "^3.0.7",
     "@types/cors": "^2.8.19",
     "@types/nodemailer": "^7.0.2",
     "bcrypt": "^6.0.0",
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
+    "express": "^5.1.0",
     "googleapis": "^162.0.0",
+    "isomorphic-fetch": "^3.0.0",
     "jsonwebtoken": "^9.0.2",
     "mysql2": "^3.15.2",
     "nodemailer": "^7.0.9",
+    "pdfkit": "^0.15.1",
     "winston": "^3.18.3"
   }
 }

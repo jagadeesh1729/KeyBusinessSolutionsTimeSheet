@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { ProjectService } from '../services/projectService';
-import { authenticate } from '../middleware/authMiddleware';
+import { authenticate, AuthRequest } from '../middleware/authMiddleware';
 import { requireAdmin, requirePMOrAdmin } from '../middleware/roleMiddleware';
 import Logger from '../utils/logger';
 
@@ -30,20 +30,13 @@ router.get('/all-with-timesheets', authenticate, requireAdmin, async (req: Reque
 
 router.get('/assigned', authenticate, async (req: Request, res: Response) => {
   try {
-    console.log('GET /assigned - Request received');
-    console.log('User from request:', (req as any).user);
     const employeeId = (req as any).user?.userId;
-    console.log('Employee ID:', employeeId);
     if (!employeeId) {
-      console.log('No employee ID found, returning 401');
       return res.status(401).json({ success: false, message: 'User not authenticated' });
     }
-    console.log('Calling projectService.getAssignedProjects with employeeId:', employeeId);
     const result = await projectService.getAssignedProjects(employeeId);
-    console.log('Project service result:', result);
     res.json(result);
   } catch (error) {
-    console.log('Error in /assigned route:', error);
     Logger.error(`Get assigned projects error: ${error}`);
     res.status(500).json({ success: false, message: 'Internal server error' });
   }
@@ -55,6 +48,23 @@ router.get('/inactive', authenticate, requirePMOrAdmin, async (req: Request, res
     res.json(result);
   } catch (error) {
     Logger.error(`Get inactive projects error: ${error}`);
+    res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+});
+
+router.get('/:id/change-logs', authenticate, requireAdmin, async (req: AuthRequest, res: Response) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) {
+      return res.status(400).json({ success: false, message: 'Invalid project ID' });
+    }
+    const result = await projectService.getProjectChangeLogs(id);
+    if (!result.success) {
+      return res.status(500).json(result);
+    }
+    res.json(result);
+  } catch (error) {
+    Logger.error(`Get project change logs error: ${error}`);
     res.status(500).json({ success: false, message: 'Internal server error' });
   }
 });
@@ -76,9 +86,11 @@ router.get('/:id', async (req: Request, res: Response) => {
   }
 });
 
-router.post('/', authenticate, requirePMOrAdmin, async (req: Request, res: Response) => {
+router.post('/', authenticate, requirePMOrAdmin, async (req: AuthRequest, res: Response) => {
   try {
-    const result = await projectService.createProject(req.body);
+    const result = await projectService.createProject(req.body, {
+      changedBy: req.user?.userId ?? null,
+    });
     if (!result.success) {
       return res.status(400).json(result);
     }
@@ -89,13 +101,15 @@ router.post('/', authenticate, requirePMOrAdmin, async (req: Request, res: Respo
   }
 });
 
-router.put('/:id', authenticate, requirePMOrAdmin, async (req: Request, res: Response) => {
+router.put('/:id', authenticate, requirePMOrAdmin, async (req: AuthRequest, res: Response) => {
   try {
     const id = parseInt(req.params.id, 10);
     if (isNaN(id)) {
       return res.status(400).json({ success: false, message: 'Invalid project ID' });
     }
-    const result = await projectService.updateProject(id, req.body);
+    const result = await projectService.updateProject(id, req.body, {
+      changedBy: req.user?.userId ?? null,
+    });
     if (!result.success) {
       return res.status(404).json(result);
     }
@@ -106,13 +120,15 @@ router.put('/:id', authenticate, requirePMOrAdmin, async (req: Request, res: Res
   }
 });
 
-router.delete('/:id', authenticate, requirePMOrAdmin, async (req: Request, res: Response) => {
+router.delete('/:id', authenticate, requirePMOrAdmin, async (req: AuthRequest, res: Response) => {
   try {
     const id = parseInt(req.params.id, 10);
     if (isNaN(id)) {
       return res.status(400).json({ success: false, message: 'Invalid project ID' });
     }
-    const result = await projectService.deactivateProject(id); // This line was missing
+    const result = await projectService.deactivateProject(id, {
+      changedBy: req.user?.userId ?? null,
+    });
     res.json(result);
   } catch (error) {
     Logger.error(`Delete project error: ${error}`);

@@ -7,7 +7,7 @@ import userRoutes from './routes/userRoutes';
 import timesheetRoutes from './routes/timesheetRoutes';
 import dashboardRoutes from './routes/dashboardRoutes';
 import offerLetterRoutes from './routes/offerLetterRoutes';
-import meetingRoutes from './routes/meetingRoutes';
+import meetingRoutes from './routes/meetingRoutes'; 
 import emailRoutes from './routes/emailRoutes';
 import { google } from 'googleapis';
 import { GoogleTokenService } from './services/googleTokenService';
@@ -62,6 +62,7 @@ class App {
     this.app.use('/api/offerletters', offerLetterRoutes);
     this.app.use('/api/meet', meetingRoutes);
     this.app.use('/api/email', emailRoutes);
+    this.app.use('/api/expiration-tracker', expirationTrackerRoutes);
 
     // Health check route
     this.app.get('/health', (req, res) => {

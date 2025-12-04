@@ -48,6 +48,43 @@ router.get('/pms', authenticate, async (req: AuthRequest, res: Response) => {
   }
 });
 
+// Get inactive Project Managers (Admin only)
+router.get('/pms/inactive', authenticate, requireAdmin, async (req: AuthRequest, res: Response) => {
+  try {
+    const result = await authService.getInactiveProjectManagers();
+    res.json(result);
+  } catch (error) {
+    Logger.error(`Get inactive PMs error: ${error}`);
+    res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+});
+
+// Get inactive Employees (Admin only)
+router.get('/employees/inactive', authenticate, requireAdmin, async (req: AuthRequest, res: Response) => {
+  try {
+    const result = await authService.getInactiveEmployees();
+    res.json(result);
+  } catch (error) {
+    Logger.error(`Get inactive employees error: ${error}`);
+    res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+});
+
+// Reactivate a user (Admin only)
+router.put('/:id/reactivate', authenticate, requireAdmin, async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = parseInt(req.params.id, 10);
+    if (isNaN(userId)) {
+      return res.status(400).json({ success: false, message: 'Invalid user ID' });
+    }
+    const result = await authService.reactivateUser(userId, req.user?.userId ?? null);
+    res.json(result);
+  } catch (error) {
+    Logger.error(`Reactivate user error: ${error}`);
+    res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+});
+
 // Protected endpoint to get projects for a specific user
 router.get('/:id/projects', authenticate, async (req: Request, res: Response) => {
   try {
@@ -63,6 +100,23 @@ router.get('/:id/projects', authenticate, async (req: Request, res: Response) =>
   }
 });
 
+router.get('/:id/change-logs', authenticate, requireAdmin, async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = parseInt(req.params.id, 10);
+    if (isNaN(userId)) {
+      return res.status(400).json({ success: false, message: 'Invalid user ID' });
+    }
+    const result = await authService.getUserChangeLogs(userId);
+    if (!result.success) {
+      return res.status(500).json(result);
+    }
+    res.json(result);
+  } catch (error) {
+    Logger.error(`Get user change logs error: ${error}`);
+    res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+});
+
 // Assign projects to user (Admin/PM only)
 router.post('/assign-projects', authenticate, requirePMOrAdmin, async (req: AuthRequest, res: Response) => {
   try {
@@ -70,7 +124,9 @@ router.post('/assign-projects', authenticate, requirePMOrAdmin, async (req: Auth
     if (!user_id || !Array.isArray(project_ids)) {
       return res.status(400).json({ success: false, message: 'User ID and project IDs array are required' });
     }
-    const result = await authService.assignProjects(req.body);
+    const result = await authService.assignProjects(req.body, {
+      changedBy: req.user?.userId ?? null,
+    });
     if (!result.success) {
       return res.status(400).json(result);
     }
@@ -120,7 +176,9 @@ router.post('/assign-employees-to-pm', authenticate, requirePMOrAdmin, async (re
     if (!pm_id || !Array.isArray(employee_ids)) {
       return res.status(400).json({ success: false, message: 'PM ID and employee IDs array are required' });
     }
-    const result = await authService.assignEmployeesToPM(req.body);
+    const result = await authService.assignEmployeesToPM(req.body, {
+      changedBy: req.user?.userId ?? null,
+    });
     res.json(result);
   } catch (error) {
     Logger.error(`Assign employees to PM error: ${error}`);
@@ -135,7 +193,7 @@ router.delete('/:id', authenticate, requireAdmin, async (req: AuthRequest, res: 
     if (isNaN(userId)) {
       return res.status(400).json({ success: false, message: 'Invalid user ID' });
     }
-    const result = await authService.deactivateUser(userId);
+    const result = await authService.deactivateUser(userId, req.user?.userId ?? null);
     res.json(result);
   } catch (error) {
     Logger.error(`Deactivate user error: ${error}`);
