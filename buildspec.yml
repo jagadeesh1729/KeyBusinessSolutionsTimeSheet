@@ -1,0 +1,32 @@
+version: 0.2
+
+phases:
+  install:
+    runtime-versions:
+      nodejs: 20
+  pre_build:
+    commands:
+      - echo "Installing dependencies..."
+      - cd backend && npm ci --ignore-scripts && cd ..
+      - cd frontend && npm ci --ignore-scripts && cd ..
+  build:
+    commands:
+      - echo "Building backend..."
+      - cd backend && npm run build && cd ..
+      - echo "Building frontend..."
+      - cd frontend && npm run build && cd ..
+
+artifacts:
+  files:
+    - backend/dist/**/*
+    - backend/package*.json
+    - backend/Dockerfile
+    - frontend/dist/**/*
+    - frontend/package*.json
+    - frontend/Dockerfile
+    - nginx/**/*
+    - docker-compose.prod.yaml
+    - docker-compose.full.yaml
+    - docker-compose.dev.yaml
+    - docker-compose.yaml
+  discard-paths: no
