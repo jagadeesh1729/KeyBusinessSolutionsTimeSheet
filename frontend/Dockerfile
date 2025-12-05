@@ -3,7 +3,7 @@ WORKDIR /app
 
 # Provide defaults for Vite build-time environment so docker builds do not rely on host files
 ARG VITE_API_BASE_URL=/api
-ARG VITE_BACKEND_URL=http://localhost:3000
+ARG VITE_BACKEND_URL=http://backend:3000
 ARG VITE_LOGIN_BACKGROUND_URL=https://source.unsplash.com/random?wallpapers
 ENV VITE_API_BASE_URL=${VITE_API_BASE_URL}
 ENV VITE_BACKEND_URL=${VITE_BACKEND_URL}
