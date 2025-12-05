@@ -45,7 +45,7 @@ services:
       DB_PORT: 3306
       DB_USER: root
       DB_PASSWORD: password
-      DB_NAME: reliance_supermart
+      DB_NAME: keybusiness
       JWT_SECRET: your-jwt-secret-key
       CORS_ORIGINS: '*'
       RATE_LIMIT_WINDOW_MS: 900000
