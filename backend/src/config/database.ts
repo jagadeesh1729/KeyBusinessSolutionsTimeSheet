@@ -20,12 +20,11 @@ const dbConfig = {
 
 class Database {
   private pool: mysql.Pool;
+  private initPromise: Promise<void>;
 
   constructor() {
     this.pool = mysql.createPool(dbConfig);
-    this.testConnectionWithRetry().catch((e) => {
-      Logger.error(`Database initial check failed unexpectedly: ${e}`);
-    });
+    this.initPromise = this.initialize();
   }
 
   async testConnection(): Promise<void> {
@@ -63,8 +62,49 @@ class Database {
     }
   }
 
+  private async ensureUsersColumns(): Promise<void> {
+    const dbName = env.db.database;
+    if (!dbName) {
+      Logger.warn('DB_NAME is not set; skipping automatic users column check.');
+      return;
+    }
+
+    const requiredColumns = [
+      { name: 'first_name', definition: 'VARCHAR(255) DEFAULT NULL' },
+      { name: 'last_name', definition: 'VARCHAR(255) DEFAULT NULL' },
+      { name: 'reset_token', definition: 'VARCHAR(255) DEFAULT NULL' },
+      { name: 'location', definition: 'VARCHAR(255) DEFAULT NULL' },
+      { name: 'no_of_hours', definition: 'INT DEFAULT NULL' },
+    ];
+
+    for (const column of requiredColumns) {
+      try {
+        const existing = await this.query<RowDataPacket[]>(
+          `SELECT 1 FROM information_schema.columns WHERE table_schema = ? AND table_name = 'users' AND column_name = ? LIMIT 1`,
+          [dbName, column.name],
+        );
+        if (!Array.isArray(existing) || existing.length === 0) {
+          Logger.warn(`Missing column '${column.name}' in users table. Adding it now.`);
+          await this.query(`ALTER TABLE users ADD COLUMN ${column.name} ${column.definition}`);
+        }
+      } catch (error) {
+        Logger.error(`Failed to verify or add column '${column.name}' on users table: ${error}`);
+        throw error;
+      }
+    }
+  }
+
   getPool(): mysql.Pool {
     return this.pool;
+  }
+
+  private async initialize(): Promise<void> {
+    await this.testConnectionWithRetry();
+    await this.ensureUsersColumns();
+  }
+
+  async ready(): Promise<void> {
+    return this.initPromise;
   }
   
 

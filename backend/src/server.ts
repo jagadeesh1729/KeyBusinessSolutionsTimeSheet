@@ -1,6 +1,7 @@
 import App from './app';
 import Logger from './utils/logger';
 import env from './config/env';
+import database from './config/database';
 
 const app = new App();
 const server = app.getApp();
@@ -22,6 +23,16 @@ process.on(
   },
 );
 
-server.listen(PORT, () => {
-  Logger.info(`🚀 Server is running on port ${PORT}`);
-});
+async function startServer() {
+  try {
+    await database.ready();
+    server.listen(PORT, () => {
+      Logger.info(`?? Server is running on port ${PORT}`);
+    });
+  } catch (error) {
+    Logger.error(`Failed to start server: ${error}`);
+    process.exit(1);
+  }
+}
+
+startServer();
