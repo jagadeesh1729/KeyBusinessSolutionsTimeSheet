@@ -151,3 +151,4 @@ For SSL support, use the `nginx-ssl.conf` configuration:
 - Never commit real secrets. Use the provided `.env.example` as a template.
 - Adjust `CORS_ORIGINS` and rate limits to match your deployment needs.
 - `docker-compose.yaml` references `${VARIABLE}` placeholders only; populate a private `.env` on EC2 (or pass `--env-file`) before running so no secrets are baked into images or committed.
+- `Added ci/cd`
