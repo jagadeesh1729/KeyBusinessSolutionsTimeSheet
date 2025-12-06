@@ -19,5 +19,15 @@ export default defineConfig(({ mode }) => {
         },
       },
     },
+    preview: {
+      port: 5000,
+      host: '0.0.0.0',
+      proxy: {
+        '/api': {
+          target: 'http://backend:3000',
+          changeOrigin: true,
+        },
+      },
+    },
   }
 })
