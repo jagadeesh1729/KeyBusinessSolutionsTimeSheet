@@ -650,9 +650,14 @@ export class TimesheetService {
         updateData.status && ['draft', 'pending', 'rejected', 'approved'].includes(updateData.status)
         ? updateData.status
         : existingTimesheet.timesheet.status;
+
+      const shouldResetReminders = newStatus !== 'draft';
+      const updateSql = shouldResetReminders
+        ? 'UPDATE timesheets SET daily_entries = ?, total_hours = ?, status = ?, reminder_count = 0, last_reminder_at = NULL, escalated = 0 WHERE id = ? AND employee_id = ?'
+        : 'UPDATE timesheets SET daily_entries = ?, total_hours = ?, status = ? WHERE id = ? AND employee_id = ?';
       
       await database.query(
-        'UPDATE timesheets SET daily_entries = ?, total_hours = ?, status = ? WHERE id = ? AND employee_id = ?',
+        updateSql,
         [JSON.stringify({ entries: updateData.dailyEntries }), totalHours, newStatus, id, employeeId]
       );
       
@@ -727,7 +732,8 @@ export class TimesheetService {
       await connection.query(
         `UPDATE timesheets 
          SET status = ?, submitted_at = ?, approved_by = ?, approved_at = ?, 
-             rejected_by = NULL, rejected_at = NULL, rejection_reason = NULL
+             rejected_by = NULL, rejected_at = NULL, rejection_reason = NULL,
+             reminder_count = 0, last_reminder_at = NULL, escalated = 0
          WHERE id = ?`,
         [newStatus, new Date().toISOString().slice(0, 19).replace('T', ' '), approvedBy, approvedAt, id]
       );
@@ -837,7 +843,7 @@ export class TimesheetService {
   async approveTimesheet(id: number, managerId: number, notes?: string): Promise<{ success: boolean; timesheet?: Timesheet; message?: string }> {
     try {
       const result = await database.query(
-        'UPDATE timesheets SET status = ?, approved_by = ?, approved_at = ? WHERE id = ?',
+        'UPDATE timesheets SET status = ?, approved_by = ?, approved_at = ?, reminder_count = 0, last_reminder_at = NULL, escalated = 0 WHERE id = ?',
         ['approved', managerId, new Date().toISOString().slice(0, 19).replace('T', ' '), id]
       ) as unknown as ResultSetHeader;
       
@@ -872,7 +878,7 @@ export class TimesheetService {
   async rejectTimesheet(id: number, managerId: number, reason: string): Promise<{ success: boolean; timesheet?: Timesheet; message?: string }> {
     try {
       const result = await database.query(
-        'UPDATE timesheets SET status = ?, rejected_by = ?, rejected_at = ?, rejection_reason = ? WHERE id = ?',
+        'UPDATE timesheets SET status = ?, rejected_by = ?, rejected_at = ?, rejection_reason = ?, reminder_count = 0, last_reminder_at = NULL, escalated = 0 WHERE id = ?',
         ['rejected', managerId, new Date().toISOString().slice(0, 19).replace('T', ' '), reason, id]
       ) as unknown as ResultSetHeader;
       

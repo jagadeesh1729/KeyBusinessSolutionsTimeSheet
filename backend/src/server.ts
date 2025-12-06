@@ -2,6 +2,8 @@ import App from './app';
 import Logger from './utils/logger';
 import env from './config/env';
 import database from './config/database';
+import { timesheetReminderService } from './services/timesheetReminderService';
+import { expirationReminderService } from './services/expirationReminderService';
 
 const app = new App();
 const server = app.getApp();
@@ -26,6 +28,8 @@ process.on(
 async function startServer() {
   try {
     await database.ready();
+    timesheetReminderService.start();
+    expirationReminderService.start();
     server.listen(PORT, () => {
       Logger.info(`?? Server is running on port ${PORT}`);
     });

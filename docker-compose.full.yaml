@@ -3,28 +3,6 @@
 # Access: http://localhost
 
 services:
-  # Nginx Reverse Proxy - Entry point for all traffic
-  nginx:
-    build:
-      context: ./nginx
-      dockerfile: Dockerfile
-    container_name: kbs-nginx
-    restart: unless-stopped
-    ports:
-      - '80:80'
-    depends_on:
-      backend:
-        condition: service_healthy
-      frontend:
-        condition: service_started
-    healthcheck:
-      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://localhost/health']
-      interval: 30s
-      timeout: 5s
-      retries: 3
-    networks:
-      - kbs-network
-
   mysql:
     image: mysql:8.0
     container_name: mysql-keybusiness
@@ -66,6 +44,8 @@ services:
       LOGIN_RATE_LIMIT_MAX: 50
     expose:
       - '3000'
+    ports:
+      - '3000:3000'
     depends_on:
       mysql:
         condition: service_healthy
@@ -91,6 +71,8 @@ services:
       VITE_API_BASE_URL: /api
     expose:
       - '80'
+    ports:
+      - '8080:80'
     networks:
       - kbs-network
 

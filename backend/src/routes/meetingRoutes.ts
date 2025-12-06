@@ -4,9 +4,10 @@ import nodemailer from 'nodemailer';
 import fs from 'fs';
 import path from 'path';
 import { authenticate } from '../middleware/authMiddleware';
-import { requirePMOrAdmin } from '../middleware/roleMiddleware';
+import { requireAdmin, requirePMOrAdmin } from '../middleware/roleMiddleware';
 import { TimesheetService } from '../services/timesheetService';
 import { GoogleTokenService } from '../services/googleTokenService';
+import meetingService from '../services/meetingService';
 import env from '../config/env';
 
 const router = Router();
@@ -95,6 +96,7 @@ router.post('/create', authenticate, requirePMOrAdmin, async (req: Request, res:
 
     const event = eventResponse.data;
     const meetLink = (event.conferenceData && event.conferenceData.entryPoints && event.conferenceData.entryPoints[0]?.uri) || (event.hangoutLink as string) || '';
+    const createdBy = Number((req as any).user?.userId);
 
     // Build recipients: attendees (optional) + PM team + PM + Admin
     const pmUser = (req as any).user || {};
@@ -169,9 +171,62 @@ router.post('/create', authenticate, requirePMOrAdmin, async (req: Request, res:
       }
     }
 
-    return res.json({ success: true, meetLink, eventId: event.id, emailSent: !emailError, emailError });
+    // Persist meeting metadata so admins can view it later
+    let meetingId: number | undefined;
+    if (createdBy) {
+      try {
+        const saveResult = await meetingService.logMeeting({
+          title,
+          meeting_link: meetLink || 'Google Meet',
+          start_time: startIso,
+          duration_minutes: durationMinutes,
+          created_by: createdBy,
+          event_id: event.id,
+        });
+        if (saveResult.success) {
+          meetingId = saveResult.meetingId;
+        }
+      } catch (persistErr: any) {
+        console.warn('Meeting created but failed to save metadata:', persistErr?.message || persistErr);
+      }
+    }
+
+    return res.json({ success: true, meetLink, eventId: event.id, meetingId, emailSent: !emailError, emailError });
   } catch (error: any) {
     return res.status(500).json({ success: false, message: error.message || 'Failed to create meeting' });
+  }
+});
+
+// Get meetings for admin (all) or PM (own)
+router.get('/', authenticate, requirePMOrAdmin, async (req: Request, res: Response) => {
+  try {
+    const { role, userId } = (req as any).user || {};
+    const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : undefined;
+    const upcomingOnly = (req.query.upcoming as string) === 'true';
+    if (role === 'admin') {
+      const result = await meetingService.listMeetings({ limit, upcomingOnly });
+      return res.json(result);
+    }
+    const uid = Number(userId);
+    if (!uid) {
+      return res.status(400).json({ success: false, message: 'Invalid user' });
+    }
+    const result = await meetingService.listUserMeetings(uid, { limit, upcomingOnly });
+    return res.json(result);
+  } catch (error: any) {
+    return res.status(500).json({ success: false, message: error.message || 'Failed to load meetings' });
+  }
+});
+
+// Explicit admin endpoint to fetch all meetings without scope limits
+router.get('/admin/all', authenticate, requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : undefined;
+    const upcomingOnly = (req.query.upcoming as string) === 'true';
+    const result = await meetingService.listMeetings({ limit, upcomingOnly });
+    return res.json(result);
+  } catch (error: any) {
+    return res.status(500).json({ success: false, message: error.message || 'Failed to load meetings' });
   }
 });
 
