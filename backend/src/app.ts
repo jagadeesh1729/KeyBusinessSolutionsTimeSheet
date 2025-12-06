@@ -80,7 +80,9 @@ class App {
     this.app.get('/', (req, res) => {
       res.send('Hello World! Check the console for logs.');
     });
-    this.app.get("/google", (req, res) => {
+
+    // Google OAuth routes
+    this.app.get("/api/google", (req, res) => {
       const url = oauth2Client.generateAuthUrl({
         access_type: "offline",
         prompt: "consent",
@@ -89,25 +91,33 @@ class App {
       });
       res.redirect(url);
     });
-this.app.get("/auth/google/callback", async (req, res) => {
-  const code = req.query.code as string;
-  const { tokens: newTokens } = await oauth2Client.getToken(code);
-  this.tokens = newTokens; // save to DB later
-  oauth2Client.setCredentials(newTokens);
-  try {
-    const tokenSvc = new GoogleTokenService();
-    await tokenSvc.saveTokens({
-      access_token: (this.tokens as any).access_token,
-      refresh_token: (this.tokens as any).refresh_token,
-      scope: (this.tokens as any).scope,
-      token_type: (this.tokens as any).token_type,
-      expiry_date: (this.tokens as any).expiry_date,
+
+    this.app.get("/api/auth/google/callback", async (req, res) => {
+      const code = req.query.code as string;
+      if (!code) {
+        return res.status(400).send("Authorization code not provided");
+      }
+      try {
+        const { tokens: newTokens } = await oauth2Client.getToken(code);
+        this.tokens = newTokens;
+        oauth2Client.setCredentials(newTokens);
+        
+        const tokenSvc = new GoogleTokenService();
+        await tokenSvc.saveTokens({
+          access_token: newTokens.access_token!,
+          refresh_token: newTokens.refresh_token || undefined,
+          scope: newTokens.scope!,
+          token_type: newTokens.token_type!,
+          expiry_date: newTokens.expiry_date!,
+        });
+        
+        // Redirect back to frontend schedule meeting page
+        res.redirect('/schedule-meeting?authorized=true');
+      } catch (e) {
+        Logger.error(`Failed to handle Google OAuth callback: ${e}`);
+        res.status(500).send("Failed to authorize. Please try again.");
+      }
     });
-  } catch (e) {
-    Logger.error(`Failed to persist Google tokens to DB: ${e}`);
-  }
-  res.send("Super Admin authorized successfully. Tokens saved to DB!");
-});
 
 
   }
