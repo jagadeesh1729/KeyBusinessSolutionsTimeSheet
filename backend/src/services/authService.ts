@@ -1323,6 +1323,29 @@ export class AuthService {
         return { success: false, message: 'User not found or already inactive' };
       }
 
+      // Get employee ID for this user
+      const empRows = (await database.query<RowDataPacket[]>(
+        'SELECT id FROM employees WHERE user_id = ? LIMIT 1',
+        [userId],
+      )) as RowDataPacket[];
+
+      // Auto-approve any draft or pending timesheets to stop reminders
+      if (empRows.length > 0) {
+        const employeeId = empRows[0].id;
+        const timesheetRows = (await database.query<RowDataPacket[]>(
+          "SELECT id FROM timesheets WHERE employee_id = ? AND status IN ('draft', 'pending')",
+          [employeeId],
+        )) as RowDataPacket[];
+
+        if (timesheetRows.length > 0) {
+          await database.query(
+            "UPDATE timesheets SET status = 'approved', updated_at = NOW() WHERE employee_id = ? AND status IN ('draft', 'pending')",
+            [employeeId],
+          );
+          Logger.info(`Auto-approved ${timesheetRows.length} draft/pending timesheet(s) for deactivated employee ${employeeId}`);
+        }
+      }
+
       const result = (await database.query(
         "UPDATE users SET is_active = 0 WHERE id = ?",
         [userId],
