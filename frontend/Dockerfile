@@ -14,5 +14,5 @@ RUN npm ci --ignore-scripts
 COPY . .
 RUN npm run build
 
-EXPOSE 5000
-CMD ["npm", "run", "preview", "--", "--host", "0.0.0.0", "--port", "5000"]
+EXPOSE 8080
+CMD ["npm", "run", "preview", "--", "--host", "0.0.0.0", "--port", "8080"]

@@ -77,27 +77,53 @@ export class TimesheetService {
         const autoApprove = timesheet.auto_approve ?? timesheet.project?.auto_approve ?? false;
 
         // ===== HEADER SECTION WITH LOGO =====
-        // Try to load logo - use process.cwd() for reliable path resolution
-        const logoPath = path.join(process.cwd(), '..', 'frontend', 'public', 'KeyLogo.png');
-        const altLogoPath = path.join(process.cwd(), 'frontend', 'public', 'KeyLogo.png');
-        const signaturePath = path.join(process.cwd(), '..', 'frontend', 'public', 'sign.png');
-        const altSignaturePath = path.join(process.cwd(), 'frontend', 'public', 'sign.png');
+        // In production (Docker), images are in backend/public
+        // In development, they could be in backend/public or frontend/public
+        const possibleLogoPaths = [
+          path.join(process.cwd(), 'public', 'KeyLogo.png'),           // Production (Docker)
+          path.join(__dirname, '..', '..', 'public', 'KeyLogo.png'),   // Compiled dist structure
+          path.join(process.cwd(), '..', 'frontend', 'public', 'KeyLogo.png'), // Dev from backend
+          path.join(process.cwd(), 'frontend', 'public', 'KeyLogo.png') // Dev from root
+        ];
         
-        let logoLoaded = false;
-        try {
-          if (fs.existsSync(logoPath)) {
-            doc.image(logoPath, 50, 40, { width: 120 });
-            logoLoaded = true;
-          } else if (fs.existsSync(altLogoPath)) {
-            doc.image(altLogoPath, 50, 40, { width: 120 });
-            logoLoaded = true;
+        const possibleSignaturePaths = [
+          path.join(process.cwd(), 'public', 'sign.png'),              // Production (Docker)
+          path.join(__dirname, '..', '..', 'public', 'sign.png'),      // Compiled dist structure
+          path.join(process.cwd(), '..', 'frontend', 'public', 'sign.png'), // Dev from backend
+          path.join(process.cwd(), 'frontend', 'public', 'sign.png')   // Dev from root
+        ];
+        
+        let logoPath: string | null = null;
+        let signaturePath: string | null = null;
+        
+        // Find existing logo path
+        for (const p of possibleLogoPaths) {
+          if (fs.existsSync(p)) {
+            logoPath = p;
+            break;
           }
-        } catch (logoErr) {
-          console.warn('Could not load logo for PDF:', logoErr);
         }
         
-        if (!logoLoaded) {
-          console.warn('Logo not found at:', logoPath, 'or', altLogoPath);
+        // Find existing signature path
+        for (const p of possibleSignaturePaths) {
+          if (fs.existsSync(p)) {
+            signaturePath = p;
+            break;
+          }
+        }
+        
+        // Load logo if found
+        let logoLoaded = false;
+        if (logoPath) {
+          try {
+            doc.image(logoPath, 50, 40, { width: 120 });
+            logoLoaded = true;
+            console.log('Logo loaded from:', logoPath);
+          } catch (logoErr) {
+            console.warn('Could not load logo for PDF:', logoErr);
+          }
+        } else {
+          console.warn('Logo not found. Searched paths:', possibleLogoPaths);
         }
 
         doc.fontSize(24).fillColor(primaryColor).font('Helvetica-Bold')
@@ -234,16 +260,15 @@ export class TimesheetService {
            .text('Employee Signature', 50, signY + 8);
         
         // Approver Signature - add signature image if auto_approve is enabled
-        if (autoApprove) {
+        if (autoApprove && signaturePath) {
           try {
-            if (fs.existsSync(signaturePath)) {
-              doc.image(signaturePath, 300, signY - 45, { width: 80 });
-            } else if (fs.existsSync(altSignaturePath)) {
-              doc.image(altSignaturePath, 300, signY - 45, { width: 80 });
-            }
+            doc.image(signaturePath, 300, signY - 45, { width: 80 });
+            console.log('Signature loaded from:', signaturePath);
           } catch (signErr) {
             console.warn('Could not load signature for PDF:', signErr);
           }
+        } else if (autoApprove && !signaturePath) {
+          console.warn('Signature not found. Searched paths:', possibleSignaturePaths);
         }
         doc.moveTo(300, signY).lineTo(545, signY).strokeColor(primaryColor).lineWidth(1).stroke();
         doc.fontSize(9).fillColor(secondaryColor).font('Helvetica')

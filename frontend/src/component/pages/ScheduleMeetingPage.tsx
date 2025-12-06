@@ -479,7 +479,7 @@ const ScheduleMeetingPage = () => {
                 </Button>
                 <Button
                   variant="outlined"
-                  href="/google"
+                  onClick={() => window.location.href = '/api/google'}
                   sx={{
                     borderColor: '#cbd5e1',
                     color: '#475569',
