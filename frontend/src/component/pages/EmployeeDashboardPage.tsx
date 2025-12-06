@@ -24,6 +24,9 @@ import HistoryIcon from '@mui/icons-material/History';
 import AccountCircleIcon from '@mui/icons-material/AccountCircle';
 import MenuIcon from '@mui/icons-material/Menu';
 import LogoutIcon from '@mui/icons-material/Logout';
+import SupportAgentIcon from '@mui/icons-material/SupportAgent';
+import EmailIcon from '@mui/icons-material/Email';
+import WhatsAppIcon from '@mui/icons-material/WhatsApp';
 import { Link as RouterLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import type { Timesheet } from '../types/Holiday';
 import EmployeeProfileView from '../mocules/EmployeeProfileView';
@@ -87,9 +90,11 @@ const EmployeeDashboardPage = () => {
     { text: 'Pending Timesheets', icon: <DraftsIcon />, path: '/employee/drafts' },
     { text: 'Past Timesheets', icon: <HistoryIcon />, path: '/employee/history' },
     { text: 'My Profile', icon: <AccountCircleIcon />, path: '/employee/profile' },
+    { text: 'Support', icon: <SupportAgentIcon />, path: '/employee/support' },
   ];
 
   const isProfileTab = location.pathname.includes('/employee/profile');
+  const isSupportTab = location.pathname.includes('/employee/support');
 
   const drawerContent = (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', color: 'white' }}>
@@ -267,6 +272,84 @@ const EmployeeDashboardPage = () => {
               ) : (
                 <EmployeeProfileView employee={employeeProfile} />
               )}
+            </Paper>
+          </Box>
+        ) : isSupportTab ? (
+          <Box>
+            <Paper elevation={2} sx={{ p: 4, maxWidth: 800, mx: 'auto' }}>
+              <Stack spacing={3}>
+                <Box sx={{ textAlign: 'center', mb: 2 }}>
+                  <SupportAgentIcon sx={{ fontSize: 64, color: '#0066A4', mb: 2 }} />
+                  <Typography variant="h4" fontWeight="bold" gutterBottom>
+                    Need Help?
+                  </Typography>
+                  <Typography variant="body1" color="text.secondary">
+                    We're here to assist you! If you're experiencing any issues or need updates to your timesheet, feel free to reach out.
+                  </Typography>
+                </Box>
+
+                <Divider />
+
+                <Stack spacing={3}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                    <Avatar sx={{ bgcolor: '#0066A4', width: 48, height: 48 }}>
+                      <EmailIcon />
+                    </Avatar>
+                    <Box>
+                      <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                        Email Support
+                      </Typography>
+                      <Typography 
+                        variant="body1" 
+                        component="a" 
+                        href="mailto:jagadeeshkrishna1729@gmail.com"
+                        sx={{ 
+                          color: '#0066A4', 
+                          textDecoration: 'none',
+                          fontWeight: 500,
+                          '&:hover': { textDecoration: 'underline' }
+                        }}
+                      >
+                        jagadeeshkrishna1729@gmail.com
+                      </Typography>
+                    </Box>
+                  </Box>
+
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                    <Avatar sx={{ bgcolor: '#25D366', width: 48, height: 48 }}>
+                      <WhatsAppIcon />
+                    </Avatar>
+                    <Box>
+                      <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                        WhatsApp
+                      </Typography>
+                      <Typography 
+                        variant="body1" 
+                        component="a" 
+                        href="https://wa.me/18064518773"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        sx={{ 
+                          color: '#25D366', 
+                          textDecoration: 'none',
+                          fontWeight: 500,
+                          '&:hover': { textDecoration: 'underline' }
+                        }}
+                      >
+                        +1 (806) 451-8773
+                      </Typography>
+                    </Box>
+                  </Box>
+                </Stack>
+
+                <Divider />
+
+                <Box sx={{ bgcolor: '#f5f5f5', p: 3, borderRadius: 2 }}>
+                  <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center' }}>
+                    💡 <strong>Quick Tip:</strong> For faster assistance, please include your employee ID and a brief description of your issue when contacting support.
+                  </Typography>
+                </Box>
+              </Stack>
             </Paper>
           </Box>
         ) : (

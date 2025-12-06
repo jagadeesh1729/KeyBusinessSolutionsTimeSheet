@@ -31,6 +31,9 @@ export interface Timesheet {
   rejected_by?: number;
   rejection_reason?: string;
   updated_at: Date;
+  reminder_count?: number;
+  last_reminder_at?: Date | string | null;
+  escalated?: number | boolean;
 }
 
 export interface CreateTimesheetRequest {

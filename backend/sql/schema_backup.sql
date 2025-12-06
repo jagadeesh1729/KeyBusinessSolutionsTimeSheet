@@ -138,6 +138,28 @@ CREATE TABLE `google_oauth_tokens` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
+-- Table structure for table `meetings`
+--
+
+DROP TABLE IF EXISTS `meetings`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `meetings` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `title` varchar(255) NOT NULL,
+  `meeting_link` varchar(1024) NOT NULL,
+  `start_time` datetime NOT NULL,
+  `duration_minutes` int NOT NULL DEFAULT '60',
+  `created_by` int NOT NULL,
+  `event_id` varchar(255) DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `created_by` (`created_by`),
+  CONSTRAINT `meetings_fk_created_by` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
 -- Table structure for table `project_change_logs`
 --
 
@@ -235,6 +257,9 @@ CREATE TABLE `timesheets` (
   `rejected_by` int DEFAULT NULL,
   `rejection_reason` text,
   `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `reminder_count` int NOT NULL DEFAULT '0',
+  `last_reminder_at` datetime DEFAULT NULL,
+  `escalated` tinyint(1) NOT NULL DEFAULT '0',
   PRIMARY KEY (`id`),
   UNIQUE KEY `unique_timesheet_period` (`employee_id`,`project_id`,`period_start`,`period_end`),
   KEY `employee_id` (`employee_id`),

@@ -27,6 +27,7 @@ import EmailIcon from '@mui/icons-material/Email';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import DescriptionIcon from '@mui/icons-material/Description';
 import DashboardIcon from '@mui/icons-material/Dashboard';
+import VideoCallIcon from '@mui/icons-material/VideoCall';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useEmployeeReviewCount } from '../hooks/useEmployeeReviewCount';
@@ -41,6 +42,7 @@ import EmployeeReviewView from '../mocules/EmployeeReviewView';
 import SendEmailView from '../mocules/SendEmailView';
 import ExpiryWatchlist from '../mocules/ExpiryWatchlist';
 import AdminOfferLetterPanel from '../offerletter/AdminOfferLetterPanel';
+import AdminMeetingsView from '../mocules/AdminMeetingsView';
 
 const DRAWER_WIDTH = 280;
 
@@ -78,6 +80,7 @@ const AdminDashboardPage = () => {
     { text: 'Emails', icon: <EmailIcon />, index: 6 },
     { text: 'Offer Letters', icon: <DescriptionIcon />, index: 7 },
     { text: 'Expirations', icon: <WarningAmberIcon />, index: 8, badge: expiryCount },
+    { text: 'Meetings', icon: <VideoCallIcon />, index: 9 },
   ];
 
   const drawerContent = (
@@ -181,6 +184,7 @@ const AdminDashboardPage = () => {
       case 6: return <SendEmailView />;
       case 7: return <AdminOfferLetterPanel />;
       case 8: return <ExpiryWatchlist />;
+      case 9: return <AdminMeetingsView />;
       default: return <AdminDashboardOverview />;
     }
   };
