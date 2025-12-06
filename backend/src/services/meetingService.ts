@@ -5,17 +5,17 @@ import { CreateMeetingRecord, Meeting } from '../models/Meeting';
 export class MeetingService {
   async logMeeting(data: CreateMeetingRecord): Promise<{ success: boolean; meetingId?: number; message?: string }> {
     try {
-      const result = await database.query<ResultSetHeader>(
+      const result = await database.query<any>(
         `INSERT INTO meetings (title, meeting_link, start_time, duration_minutes, created_by, event_id)
          VALUES (?, ?, ?, ?, ?, ?)`,
         [
           data.title,
           data.meeting_link,
-          new Date(data.start_time),
+          new Date(data.start_time).toISOString().slice(0, 19).replace('T', ' '),
           data.duration_minutes ?? 60,
           data.created_by,
-          data.event_id || null,
-        ]
+          data.event_id || '',
+        ] as (string | number)[]
       );
       return { success: true, meetingId: result.insertId };
     } catch (error: any) {
@@ -28,7 +28,7 @@ export class MeetingService {
     try {
       const { limit, upcomingOnly } = params;
       const filters: string[] = [];
-      const sqlParams: (string | number | Date)[] = [];
+      const sqlParams: (string | number)[] = [];
 
       if (upcomingOnly) {
         filters.push('m.start_time >= NOW()');
@@ -62,7 +62,7 @@ export class MeetingService {
     try {
       const { limit, upcomingOnly } = params;
       const filters: string[] = ['m.created_by = ?'];
-      const sqlParams: (string | number | Date)[] = [userId];
+      const sqlParams: (string | number)[] = [userId];
 
       if (upcomingOnly) {
         filters.push('m.start_time >= NOW()');
