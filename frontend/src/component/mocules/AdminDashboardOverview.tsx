@@ -35,8 +35,6 @@ import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import FolderIcon from '@mui/icons-material/Folder';
-import ContentCopyIcon from '@mui/icons-material/ContentCopy';
-import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import VideocamOutlinedIcon from '@mui/icons-material/VideocamOutlined';
 import { useDashboardStats } from '../hooks/useTimesheet';
 import useMeetings from '../hooks/useMeetings';
@@ -111,22 +109,7 @@ const AdminDashboardOverview = () => {
   const theme = useTheme();
   const [timeRange, setTimeRange] = useState<string>('current');
   const { data, loading, error, refetch } = useDashboardStats(timeRange);
-  const { meetings: upcomingMeetings, loading: meetingsLoading, error: meetingsError, refetch: refetchMeetings } = useMeetings({ upcomingOnly: true, limit: 5 });
-  const [copiedMeetingId, setCopiedMeetingId] = useState<number | null>(null);
-
-  const handleCopyLink = async (id: number, link: string) => {
-    try {
-      await navigator.clipboard.writeText(link);
-      setCopiedMeetingId(id);
-      setTimeout(() => setCopiedMeetingId(null), 1000);
-    } catch {}
-  };
-
-  const formatMeetingTime = (value: string) => {
-    const d = new Date(value);
-    if (Number.isNaN(d.getTime())) return value;
-    return d.toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
-  };
+  const { meetings: upcomingMeetings, loading: meetingsLoading } = useMeetings({ upcomingOnly: true });
 
   useEffect(() => {
     if (!loading && !error && data) {
@@ -252,6 +235,16 @@ const AdminDashboardOverview = () => {
             subtitle="All submitted timesheets"
           />
         </div>
+        <div className="col-span-12 sm:col-span-6 md:col-span-3">
+          <StatCard
+            title="Upcoming Meetings"
+            value={meetingsLoading ? 0 : upcomingMeetings.length}
+            icon={<VideocamOutlinedIcon />}
+            color="#673ab7"
+            bgColor={alpha('#673ab7', 0.1)}
+            subtitle="Scheduled meetings"
+          />
+        </div>
       </div>
 
       {/* Stats Cards - Row 2: Timesheet Status */}
@@ -305,90 +298,6 @@ const AdminDashboardOverview = () => {
             bgColor={alpha('#ff9800', 0.1)}
             subtitle="Not yet submitted"
           />
-        </div>
-      </div>
-
-      {/* Upcoming Meetings */}
-      <div className="grid grid-cols-12 gap-6 mb-8">
-        <div className="col-span-12">
-          <Card sx={{ borderRadius: 3, border: `1px solid ${theme.palette.divider}`, boxShadow: 'none' }}>
-            <CardContent sx={{ p: 3 }}>
-              <Stack direction={{ xs: 'column', sm: 'row' }} alignItems={{ xs: 'flex-start', sm: 'center' }} justifyContent="space-between" spacing={2} mb={2}>
-                <Stack direction="row" spacing={1.5} alignItems="center">
-                  <Avatar sx={{ bgcolor: alpha(theme.palette.primary.main, 0.12), color: theme.palette.primary.main }}>
-                    <VideocamOutlinedIcon />
-                  </Avatar>
-                  <Box>
-                    <Typography variant="h6" fontWeight={700}>Upcoming Meetings</Typography>
-                    <Typography variant="body2" color="text.secondary">Recent Google Meet links created by PMs</Typography>
-                  </Box>
-                  <Chip label={`${upcomingMeetings.length || 0} scheduled`} size="small" />
-                </Stack>
-                <Stack direction="row" spacing={1}>
-                  <IconButton onClick={() => refetchMeetings({ upcomingOnly: true })} sx={{ bgcolor: alpha(theme.palette.primary.main, 0.08) }}>
-                    <RefreshIcon />
-                  </IconButton>
-                </Stack>
-              </Stack>
-
-              {meetingsLoading ? (
-                <Box sx={{ py: 4, display: 'flex', justifyContent: 'center' }}>
-                  <CircularProgress size={32} />
-                </Box>
-              ) : meetingsError ? (
-                <Alert severity="error" sx={{ borderRadius: 2 }}>{meetingsError}</Alert>
-              ) : upcomingMeetings && upcomingMeetings.length > 0 ? (
-                <Stack spacing={2}>
-                  {upcomingMeetings.map((meeting) => (
-                    <Box
-                      key={meeting.id}
-                      sx={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        p: 2,
-                        border: `1px solid ${theme.palette.divider}`,
-                        borderRadius: 2,
-                        bgcolor: alpha(theme.palette.primary.main, 0.02),
-                      }}
-                    >
-                      <Stack spacing={0.75} sx={{ minWidth: 0 }}>
-                        <Stack direction="row" spacing={1} alignItems="center">
-                          <VideocamOutlinedIcon fontSize="small" sx={{ color: theme.palette.primary.main }} />
-                          <Typography variant="body1" fontWeight={700} noWrap>
-                            {meeting.title}
-                          </Typography>
-                          <Chip size="small" label={formatMeetingTime(meeting.start_time)} />
-                        </Stack>
-                        <Typography variant="body2" color="text.secondary" noWrap>
-                          Host: {meeting.created_by_name || 'Project Manager'} {meeting.created_by_email ? `· ${meeting.created_by_email}` : ''}
-                        </Typography>
-                        <Typography variant="caption" color="primary" sx={{ wordBreak: 'break-all' }}>
-                          {meeting.meeting_link}
-                        </Typography>
-                      </Stack>
-                      <Stack direction="row" spacing={1}>
-                        <Tooltip title="Open meeting">
-                          <IconButton component="a" href={meeting.meeting_link} target="_blank" rel="noreferrer">
-                            <OpenInNewIcon fontSize="small" />
-                          </IconButton>
-                        </Tooltip>
-                        <Tooltip title={copiedMeetingId === meeting.id ? 'Copied' : 'Copy link'}>
-                          <IconButton onClick={() => handleCopyLink(meeting.id, meeting.meeting_link)}>
-                            <ContentCopyIcon fontSize="small" color={copiedMeetingId === meeting.id ? 'success' : 'inherit'} />
-                          </IconButton>
-                        </Tooltip>
-                      </Stack>
-                    </Box>
-                  ))}
-                </Stack>
-              ) : (
-                <Typography variant="body2" color="text.secondary">
-                  No upcoming meetings found.
-                </Typography>
-              )}
-            </CardContent>
-          </Card>
         </div>
       </div>
 

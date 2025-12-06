@@ -13,6 +13,7 @@ const SignupGate = lazy(() => import('./component/mocules/SignGate.tsx'))
 const UserTimesheetEntry = lazy(() => import('./component/pages/UserTimesheetEntry.tsx'))
 const TimesheetHistory = lazy(() => import('./component/pages/TimesheetHistory.tsx'))
 const PreviousDrafts = lazy(() => import('./component/pages/PreviousDrafts.tsx'))
+const SupportPage = lazy(() => import('./component/pages/SupportPage.tsx'))
 const OfferLetter = lazy(() => import('./component/offerletter/OfferLetter.tsx'))
 const AdminOfferLetterPanel = lazy(() => import('./component/offerletter/AdminOfferLetterPanel.tsx'))
 
@@ -65,6 +66,7 @@ function App() {
             <Route path="timesheet/edit/:id" element={<UserTimesheetEntry />} />
             <Route path="drafts" element={<PreviousDrafts />} />
             <Route path="history" element={<TimesheetHistory />} />
+            <Route path="support" element={<SupportPage />} />
             <Route path="profile" element={<></>} />
           </Route>
         </Route>

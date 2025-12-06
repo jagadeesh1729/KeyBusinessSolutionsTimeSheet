@@ -148,15 +148,20 @@ const ProjectManagerView = () => {
   };
 
   const handleSaveWithEmployees = async () => {
+    // Save the PM ID before handleSave() closes the modal and clears editingManager
+    const pmId = editingManager?.id;
+    
     await handleSave();
-    if (selectedEmployeeIds.length >= 0 && editingManager) {
+    
+    // Use the saved pmId instead of editingManager which is now null
+    if (pmId && selectedEmployeeIds.length >= 0) {
       try {
         await apiClient.post('/users/assign-employees-to-pm', {
-          pm_id: editingManager.id,
+          pm_id: pmId,
           employee_ids: selectedEmployeeIds
         });
         await fetchEmployees();
-        await fetchPMEmployees(editingManager.id);
+        await fetchPMEmployees(pmId);
       } catch (error) {
         console.error('Failed to assign employees:', error);
       }

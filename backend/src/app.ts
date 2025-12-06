@@ -33,7 +33,7 @@ class App {
   }
 
   private initializeMiddleware(): void {
-    const allowedOrigins = env.corsOrigins.length ? env.corsOrigins : ['http://localhost:5173'];
+    const allowedOrigins = env.corsOrigins.length ? env.corsOrigins : ['http://localhost:8080'];
     const allowAllOrigins = allowedOrigins.includes('*');
     this.app.set('trust proxy', env.trustProxy ? 1 : undefined);
     this.app.use(securityHeaders);

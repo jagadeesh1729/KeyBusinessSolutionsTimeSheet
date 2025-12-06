@@ -1,26 +1,18 @@
 import { Router, Request, Response } from 'express';
-import nodemailer from 'nodemailer';
 import { Client } from '@microsoft/microsoft-graph-client';
 import { ClientSecretCredential } from '@azure/identity';
 import 'isomorphic-fetch';
 import dotenv from 'dotenv';
 import { authenticate } from '../middleware/authMiddleware';
 import { requirePMOrAdmin } from '../middleware/roleMiddleware';
-import env from '../config/env';
 import Logger from '../utils/logger';
 
 const outer = Router();
 
-const mailer = nodemailer.createTransport({
-  host: env.email.host || 'smtp.office365.com',
-  port: env.email.port || 587,
-  secure: false,
-  auth: { user: env.email.user, pass: env.email.pass },
-});
 const tenantId = process.env.MS_TENANT_ID || '';
 const clientId = process.env.MS_CLIENT_ID || '';
 const clientSecret = process.env.MS_CLIENT_SECRET || '';
-const fromEmail = 'Timesheet@keybusinessglobal.com'; // keep your existing from email here
+const fromEmail = 'Timesheet@keybusinessglobal.com';
 
 let credential: InstanceType<typeof ClientSecretCredential> | null = null;
 
@@ -80,9 +72,8 @@ outer.post('/send', authenticate, requirePMOrAdmin, async (req: Request, res: Re
     if (!recipients.length) {
       return res.status(400).json({ success: false, message: 'Recipient list (to) is required' });
     }
-    const from = env.email.from || env.email.user!;
-    await mailer.sendMail({ from, to: recipients.join(','), subject: subject || '(no subject)', html: html || text || '' , text });
 
+    // Use Microsoft Graph API for sending emails
     await sendMail(recipients, subject || '(no subject)', html || text || '', text);
 
     return res.json({ success: true });
