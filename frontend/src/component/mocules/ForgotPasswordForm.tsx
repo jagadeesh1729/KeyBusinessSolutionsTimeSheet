@@ -38,115 +38,57 @@ const ForgotPasswordForm: React.FC<ForgotPasswordFormProps> = ({ onCodeSent, onB
     }
   };
 
+  const friendlyError = error
+    ? (() => {
+        const msg = error.toString();
+        if (/network/i.test(msg)) return 'Network issue. Please check your connection and try again.';
+        if (/invalid|not found/i.test(msg)) return 'We could not find that email. Double-check and try again.';
+        return 'We could not send the reset code. Please try again or contact support if it continues.';
+      })()
+    : null;
+
   return (
-    <Box className="w-full">
-      <Box
-        className="rounded-2xl border border-slate-200 bg-white shadow-lg"
-        sx={{ overflow: 'hidden' }}
-      >
-        <Box className="bg-gradient-to-r from-sky-500 to-indigo-600 px-6 py-5">
-          <Typography
-            component="h1"
-            variant="h5"
-            className="text-white font-semibold"
-          >
-            Forgot Password
-          </Typography>
-          <Typography variant="body2" className="text-sky-50 mt-1">
-            Enter your email and we’ll send a reset code. Employees can also reach support if you’re stuck.
-          </Typography>
-        </Box>
-
-        <Box className="grid grid-cols-1 lg:grid-cols-5 gap-0">
-          <Box className="lg:col-span-3 px-6 py-6">
-            {error && (
-              <Alert severity="error" sx={{ width: '100%', mb: 2 }}>
-                {error}
-              </Alert>
-            )}
-            {success && (
-              <Alert severity="success" sx={{ width: '100%', mb: 2 }}>
-                {success}
-              </Alert>
-            )}
-            <Box
-              component="form"
-              onSubmit={handleSubmit}
-              className="space-y-4"
-            >
-              <TextField
-                margin="normal"
-                required
-                fullWidth
-                id="email"
-                label="Work Email"
-                name="email"
-                autoComplete="email"
-                type="email"
-                autoFocus
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                sx={{
-                  '& .MuiOutlinedInput-root': {
-                    borderRadius: '12px',
-                  },
-                }}
-              />
-              <Button
-                type="submit"
-                fullWidth
-                variant="contained"
-                className="h-12 rounded-xl text-sm font-semibold"
-                sx={{
-                  background: 'linear-gradient(90deg, #0ea5e9, #2563eb)',
-                  '&:hover': { background: 'linear-gradient(90deg, #0284c7, #1d4ed8)' },
-                }}
-                disabled={loading}
-              >
-                {loading ? <CircularProgress size={22} color="inherit" /> : 'Send Reset Code'}
-              </Button>
-              <Box className="text-center">
-                <Button
-                  onClick={onBackToLogin}
-                  size="small"
-                  className="text-slate-600 hover:text-slate-900"
-                  sx={{ textTransform: 'none', fontWeight: 600 }}
-                >
-                  Back to Login
-                </Button>
-              </Box>
-            </Box>
-          </Box>
-
-          <Box className="lg:col-span-2 bg-slate-50 border-t border-l border-slate-200 px-6 py-6 flex flex-col gap-4">
-            <Typography variant="subtitle2" className="text-slate-700 font-semibold">
-              Support
-            </Typography>
-            <Typography variant="body2" className="text-slate-600 leading-relaxed">
-              Employee dashboard support is here to help. If you hit any trouble or need an update, ping us anytime.
-            </Typography>
-            <Box className="space-y-2">
-              <Box className="rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
-                <Typography variant="caption" className="text-slate-500 uppercase tracking-wide">
-                  Email
-                </Typography>
-                <Typography variant="body1" className="text-slate-800 font-semibold">
-                  jagadeeshkrishna1729@gmail.com
-                </Typography>
-              </Box>
-              <Box className="rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
-                <Typography variant="caption" className="text-slate-500 uppercase tracking-wide">
-                  WhatsApp
-                </Typography>
-                <Typography variant="body1" className="text-slate-800 font-semibold">
-                  +1 806 451 8773
-                </Typography>
-              </Box>
-            </Box>
-          </Box>
+    <>
+      <Typography component="h1" variant="h5" sx={{ mb: 1, fontWeight: 'bold' }}>
+        Forgot Password
+      </Typography>
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+        Enter your email and we'll send you a code to reset your password.
+      </Typography>
+      {error && (
+        <Alert severity="error" sx={{ width: '100%', mb: 2 }}>
+          {friendlyError}
+        </Alert>
+      )}
+      {success && (
+        <Alert severity="success" sx={{ width: '100%', mb: 2 }}>
+          {success}
+        </Alert>
+      )}
+      <Box component="form" onSubmit={handleSubmit} sx={{ mt: 1, width: '100%' }}>
+        <TextField
+          margin="normal"
+          required
+          fullWidth
+          id="email"
+          label="Email Address"
+          name="email"
+          autoComplete="email"
+          autoFocus
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          inputProps={{ 'data-no-pascal': true }}
+        />
+        <Button type="submit" fullWidth variant="contained" sx={{ mt: 3, mb: 2 }} disabled={loading}>
+          {loading ? <CircularProgress size={24} /> : 'Send Reset Code'}
+        </Button>
+        <Box textAlign="center">
+          <Button onClick={onBackToLogin} size="small" sx={{ textTransform: 'none' }}>
+            Back to Login
+          </Button>
         </Box>
       </Box>
-    </Box>
+    </>
   );
 };
 
